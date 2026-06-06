@@ -1,0 +1,175 @@
+import { useState } from "react";
+import { useAugment, type View } from "../state/augment";
+import { formatRelative } from "../lib/time";
+import {
+  ClockIcon,
+  CloseIcon,
+  EyeIcon,
+  FolderIcon,
+  InboxIcon,
+  MailIcon,
+  PlusIcon,
+  SlidersIcon,
+} from "./icons";
+import type { ReactNode } from "react";
+
+interface NavItem {
+  id: View;
+  label: string;
+  icon: ReactNode;
+}
+
+const NAV: NavItem[] = [
+  { id: "inbox", label: "Inbox", icon: <InboxIcon size={17} /> },
+  { id: "snoozed", label: "Snoozed", icon: <ClockIcon size={17} /> },
+  { id: "watching", label: "Watching", icon: <EyeIcon size={17} /> },
+  { id: "rules", label: "Rules", icon: <SlidersIcon size={17} /> },
+];
+
+export function Sidebar() {
+  const {
+    view,
+    setView,
+    email,
+    signOut,
+    schedule,
+    rules,
+    activity,
+    folders,
+    activeFolderId,
+    createFolder,
+    removeFolder,
+    openFolder,
+  } = useAugment();
+
+  const [adding, setAdding] = useState(false);
+  const [draftName, setDraftName] = useState("");
+
+  const counts: Record<string, number | null> = {
+    inbox: null,
+    snoozed: schedule.filter((s) => s.kind === "snooze").length,
+    watching: schedule.filter((s) => s.kind === "watch").length,
+    rules: rules.filter((r) => r.enabled).length,
+  };
+
+  function submitFolder() {
+    void createFolder(draftName);
+    setDraftName("");
+    setAdding(false);
+  }
+
+  function cancelFolder() {
+    setDraftName("");
+    setAdding(false);
+  }
+
+  return (
+    <aside className="sidebar">
+      <div className="sidebar-brand">
+        <div className="sidebar-logo">
+          <MailIcon size={18} />
+        </div>
+        <span>Augment</span>
+      </div>
+
+      <nav className="sidebar-nav">
+        {NAV.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            className={`nav-item ${view === item.id ? "nav-item-active" : ""}`}
+            onClick={() => setView(item.id)}
+          >
+            <span className="nav-icon">{item.icon}</span>
+            <span className="nav-label">{item.label}</span>
+            {counts[item.id] ? <span className="nav-count">{counts[item.id]}</span> : null}
+          </button>
+        ))}
+      </nav>
+
+      <div className="sidebar-folders">
+        <div className="sidebar-section-head">
+          <span>Folders</span>
+          <button
+            type="button"
+            className="section-add"
+            title="New folder"
+            onClick={() => setAdding((v) => !v)}
+          >
+            <PlusIcon size={14} />
+          </button>
+        </div>
+
+        {adding && (
+          <input
+            className="folder-input"
+            autoFocus
+            value={draftName}
+            placeholder="Folder name"
+            maxLength={60}
+            onChange={(event) => setDraftName(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") submitFolder();
+              else if (event.key === "Escape") cancelFolder();
+            }}
+            onBlur={cancelFolder}
+          />
+        )}
+
+        <div className="folder-list">
+          {folders.length === 0 && !adding && (
+            <div className="folder-empty">No folders yet.</div>
+          )}
+          {folders.map((folder) => {
+            const active = view === "folder" && activeFolderId === folder.id;
+            return (
+              <div className="folder-row" key={folder.id}>
+                <button
+                  type="button"
+                  className={`nav-item folder-item ${active ? "nav-item-active" : ""}`}
+                  onClick={() => openFolder(folder)}
+                >
+                  <span className="nav-icon">
+                    <FolderIcon size={16} />
+                  </span>
+                  <span className="nav-label">{folder.name}</span>
+                </button>
+                <button
+                  type="button"
+                  className="folder-remove"
+                  title="Remove folder"
+                  onClick={() => removeFolder(folder.id)}
+                >
+                  <CloseIcon size={13} />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="sidebar-activity">
+        <div className="sidebar-activity-head">Activity</div>
+        <div className="sidebar-activity-list">
+          {activity.length === 0 && <div className="activity-empty">Nothing yet.</div>}
+          {activity.slice(0, 6).map((entry) => (
+            <div key={entry.id} className={`activity-row activity-${entry.tone}`}>
+              <span className="activity-dot" />
+              <span className="activity-text">{entry.text}</span>
+              <span className="activity-time">{formatRelative(entry.ts)}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="sidebar-account">
+        <div className="account-email" title={email ?? ""}>
+          {email ?? "Not signed in"}
+        </div>
+        <button className="link-btn" type="button" onClick={signOut}>
+          Sign out
+        </button>
+      </div>
+    </aside>
+  );
+}

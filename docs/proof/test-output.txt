@@ -1,0 +1,41 @@
+Augment — test & build proof
+Generated: Fri Jun  5 22:28:33 CEST 2026
+
+================ TypeScript unit tests (Vitest, jsdom) ================
+ RUN  v3.2.6 /Users/taaliis4/Projects/augment
+
+ ✓ src/lib/rules/engine.test.ts (12 tests) 2ms
+ ✓ src/lib/gmail/parse.test.ts (17 tests) 3ms
+ ✓ src/lib/sanitize/noRemote.integration.test.ts (6 tests) 1ms
+ ✓ src/lib/sanitize/sanitizeEmail.test.ts (13 tests) 18ms
+
+ Test Files  4 passed (4)
+      Tests  48 passed (48)
+   Start at  22:28:33
+   Duration  317ms (transform 64ms, setup 0ms, collect 107ms, tests 25ms, environment 527ms, prepare 133ms)
+
+================ Rust unit tests (cargo test) ================
+running 10 tests
+test oauth::tests::parses_code_and_state_from_redirect_target ... ok
+test oauth::tests::auth_url_contains_required_params ... ok
+test oauth::tests::request_target_parsed_from_request_line ... ok
+test oauth::tests::pkce_challenge_is_sha256_base64url_of_verifier ... ok
+test scheduler::tests::drain_due_excludes_future_items ... ok
+test oauth::tests::surfaces_oauth_error_from_redirect ... ok
+test scheduler::tests::load_missing_file_is_empty ... ok
+test scheduler::tests::drain_due_re_emits_until_removed ... ok
+test scheduler::tests::drain_due_returns_only_past_due_items ... ok
+test scheduler::tests::save_then_load_roundtrips ... ok
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+running 0 tests
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+running 0 tests
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+================ TypeScript typecheck (tsc --noEmit, strict) ================
+
+OK — zero type errors
+
+================ Release bundle artifacts ================
+total 0
+-rw-r--r--@ 1 taaliis4  staff   4.5M Jun  5 22:19 src-tauri/target/release/bundle/dmg/Augment_0.1.0_aarch64.dmg
