@@ -12,6 +12,11 @@ function useSuppressNativeContextMenu() {
       const target = event.target as HTMLElement | null;
       if (target?.closest('input, textarea, [contenteditable="true"]')) return;
       event.preventDefault();
+      // Right-clicking app chrome shouldn't leave a stray text selection behind
+      // (keep any selection the user made in the reading pane).
+      if (!target?.closest(".reader")) {
+        window.getSelection()?.removeAllRanges();
+      }
     }
     window.addEventListener("contextmenu", onContextMenu);
     return () => window.removeEventListener("contextmenu", onContextMenu);

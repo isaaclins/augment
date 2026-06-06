@@ -7,6 +7,8 @@
 
 use std::io::{Read, Write};
 use std::net::TcpListener;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -99,7 +101,11 @@ pub async fn run_login(
     http: &reqwest::Client,
     refresh_slot: &std::sync::Mutex<Option<String>>,
     creds_slot: &std::sync::Mutex<Option<OauthCreds>>,
+    cancel: &Arc<AtomicBool>,
 ) -> AppResult<OauthResult> {
+    // Clear any stale cancel request from a previous attempt.
+    cancel.store(false, Ordering::SeqCst);
+
     let creds = OauthCreds::from_env()?;
     let pkce = Pkce::generate();
     let state = random_state();
@@ -115,9 +121,11 @@ pub async fn run_login(
 
     // The blocking accept loop runs off the async runtime so we don't stall it.
     let expected_state = state.clone();
-    let code = tokio::task::spawn_blocking(move || wait_for_redirect(listener, &expected_state))
-        .await
-        .map_err(|e| AppError::Internal(format!("redirect task panicked: {e}")))??;
+    let cancel_flag = cancel.clone();
+    let code =
+        tokio::task::spawn_blocking(move || wait_for_redirect(listener, &expected_state, &cancel_flag))
+            .await
+            .map_err(|e| AppError::Internal(format!("redirect task panicked: {e}")))??;
 
     let tokens = exchange_code(http, &creds, &redirect_uri, &code, &pkce.verifier).await?;
 
@@ -224,11 +232,18 @@ fn open_in_browser(url: &str) -> AppResult<()> {
 /// Block until the browser redirects back with `?code=...&state=...`, validating
 /// the CSRF state. Uses a non-blocking accept loop with a hard deadline so a
 /// stale tab can never hang the thread.
-fn wait_for_redirect(listener: TcpListener, expected_state: &str) -> AppResult<String> {
+fn wait_for_redirect(
+    listener: TcpListener,
+    expected_state: &str,
+    cancel: &AtomicBool,
+) -> AppResult<String> {
     listener.set_nonblocking(true)?;
     let deadline = Instant::now() + REDIRECT_TIMEOUT;
 
     loop {
+        if cancel.load(Ordering::SeqCst) {
+            return Err(AppError::OauthCancelled);
+        }
         if Instant::now() >= deadline {
             return Err(AppError::OauthTimeout);
         }

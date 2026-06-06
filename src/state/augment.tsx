@@ -15,7 +15,7 @@ import {
 } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
-import { clearStoredSession, refreshAccessToken, startOAuth } from "../lib/auth/commands";
+import { cancelOAuth, clearStoredSession, refreshAccessToken, startOAuth } from "../lib/auth/commands";
 import { Session } from "../lib/auth/session";
 import { GmailClient } from "../lib/gmail/client";
 import { loadLatestMessages, loadThreadRows, type ThreadRow } from "../lib/gmail/inbox";
@@ -27,6 +27,13 @@ import {
   snoozeThread as snoozeThreadFeature,
   watchThread as watchThreadFeature,
 } from "../lib/features/schedule";
+import {
+  deleteTemplate as deleteTemplateFeature,
+  draftFromTemplate,
+  loadTemplates,
+  saveTemplate as saveTemplateFeature,
+  type Template,
+} from "../lib/features/templates";
 import {
   onScheduleDue,
   scheduleList,
@@ -46,7 +53,7 @@ import {
 } from "../lib/store";
 
 export type Status = "restoring" | "signedOut" | "authenticating" | "ready" | "error";
-export type View = "inbox" | "snoozed" | "watching" | "rules" | "folder";
+export type View = "inbox" | "snoozed" | "watching" | "rules" | "folder" | "templates" | "settings";
 
 export interface ActivityEntry {
   id: string;
@@ -107,6 +114,7 @@ export interface AugmentApi {
   busy: string | null;
 
   signIn: () => Promise<void>;
+  cancelSignIn: () => void;
   signOut: () => void;
 
   archiveThread: (id: string) => Promise<void>;
@@ -120,6 +128,14 @@ export interface AugmentApi {
   saveRule: (rule: Rule) => void;
   deleteRule: (id: string) => void;
   toggleRule: (id: string) => void;
+
+  // Email templates, stored as labeled messages in Gmail (synced, never sent).
+  templates: Template[];
+  templatesLoading: boolean;
+  refreshTemplates: () => Promise<void>;
+  saveTemplate: (name: string, body: string, replaceId?: string) => Promise<void>;
+  deleteTemplate: (id: string) => Promise<void>;
+  useTemplate: (template: Template) => Promise<void>;
 
   settings: Settings;
   updateSettings: (patch: Partial<Settings>) => void;
@@ -152,6 +168,9 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
 
   const [folders, setFolders] = useState<Folder[]>(() => loadFolders());
   const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
+
+  const [templates, setTemplates] = useState<Template[]>([]);
+  const [templatesLoading, setTemplatesLoading] = useState(false);
 
   const [rows, setRows] = useState<ThreadRow[]>([]);
   const [listTitle, setListTitle] = useState("Inbox");
@@ -323,24 +342,40 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
     };
   }, [status, handleDue]);
 
+  // Each sign-in gets an attempt id; cancelling bumps it so a late resolve or
+  // reject from the abandoned flow can't flip the UI back.
+  const authAttemptRef = useRef(0);
+
   const signIn = useCallback(async () => {
+    const attempt = (authAttemptRef.current += 1);
     setStatus("authenticating");
     setError(null);
     try {
       const result = await startOAuth();
+      if (authAttemptRef.current !== attempt) return; // cancelled/superseded
       sessionRef.current.setTokens(result);
       const profile = await client.getProfile();
+      if (authAttemptRef.current !== attempt) return;
       sessionRef.current.setEmail(profile.emailAddress);
       setEmail(profile.emailAddress);
       setStatus("ready");
       pushActivity(`Signed in as ${profile.emailAddress}`, "success");
       await refresh();
     } catch (err) {
+      if (authAttemptRef.current !== attempt) return; // cancelled — ignore
       sessionRef.current.clear();
       setStatus("error");
       setError(errorMessage(err));
     }
   }, [client, pushActivity, refresh]);
+
+  const cancelSignIn = useCallback(() => {
+    authAttemptRef.current += 1; // invalidate the in-flight attempt
+    void cancelOAuth().catch(() => {}); // abort the loopback wait in Rust
+    sessionRef.current.clear();
+    setError(null);
+    setStatus("signedOut");
+  }, []);
 
   // On launch, try to restore a persisted session: the Rust side preloads the
   // refresh token from the OS keychain, so a silent refresh succeeds if we were
@@ -397,6 +432,7 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
     nextPageTokenRef.current = undefined;
     setHasMore(false);
     setLoadingMore(false);
+    setTemplates([]);
   }, [client]);
 
   const removeRow = useCallback(
@@ -488,6 +524,61 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
   // Switch the main view. Navigating to the inbox reloads it (rows may still
   // hold a folder's mail); the snoozed/watching/rules panels read their own
   // data and don't touch the mail list.
+  const refreshTemplates = useCallback(async () => {
+    setTemplatesLoading(true);
+    try {
+      setTemplates(await loadTemplates(client));
+    } catch (err) {
+      pushActivity(`Could not load templates: ${errorMessage(err)}`, "warn");
+    } finally {
+      setTemplatesLoading(false);
+    }
+  }, [client, pushActivity]);
+
+  const saveTemplate = useCallback(
+    async (name: string, body: string, replaceId?: string) => {
+      const trimmed = name.trim();
+      if (!trimmed) return;
+      try {
+        const selfEmail = sessionRef.current.getEmail() ?? "";
+        await saveTemplateFeature(client, selfEmail, { name: trimmed, body }, replaceId);
+        pushActivity(replaceId ? `Updated template “${trimmed}”` : `Created template “${trimmed}”`, "success");
+        await refreshTemplates();
+      } catch (err) {
+        pushActivity(`Could not save template: ${errorMessage(err)}`, "warn");
+      }
+    },
+    [client, pushActivity, refreshTemplates],
+  );
+
+  const deleteTemplate = useCallback(
+    async (id: string) => {
+      try {
+        await deleteTemplateFeature(client, id);
+        setTemplates((prev) => prev.filter((t) => t.id !== id));
+        pushActivity("Template deleted", "info");
+      } catch (err) {
+        pushActivity(`Could not delete template: ${errorMessage(err)}`, "warn");
+      }
+    },
+    [client, pushActivity],
+  );
+
+  // Turn a template into a real Gmail draft (HTML preserved), then open Gmail's
+  // Drafts so the user can finish and send it there.
+  const useTemplate = useCallback(
+    async (template: Template) => {
+      try {
+        await draftFromTemplate(client, template);
+        await openUrl("https://mail.google.com/mail/u/0/#drafts");
+        pushActivity(`Drafted “${template.name}” in Gmail`, "success");
+      } catch (err) {
+        pushActivity(`Could not create draft: ${errorMessage(err)}`, "warn");
+      }
+    },
+    [client, pushActivity],
+  );
+
   const changeView = useCallback(
     (next: View) => {
       if (next === "inbox") {
@@ -500,9 +591,10 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
         return;
       }
       if (next !== "folder") setActiveFolderId(null);
+      if (next === "templates") void refreshTemplates();
       setViewState(next);
     },
-    [clearSelection, refreshInbox],
+    [clearSelection, refreshInbox, refreshTemplates],
   );
 
   const openFolder = useCallback(
@@ -789,6 +881,7 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
       activity,
       busy,
       signIn,
+      cancelSignIn,
       signOut,
       archiveThread,
       markRead,
@@ -800,6 +893,12 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
       saveRule,
       deleteRule,
       toggleRule,
+      templates,
+      templatesLoading,
+      refreshTemplates,
+      saveTemplate,
+      deleteTemplate,
+      useTemplate,
       settings,
       updateSettings,
     }),
@@ -836,6 +935,7 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
       activity,
       busy,
       signIn,
+      cancelSignIn,
       signOut,
       openThread,
       closeThread,
@@ -849,6 +949,12 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
       saveRule,
       deleteRule,
       toggleRule,
+      templates,
+      templatesLoading,
+      refreshTemplates,
+      saveTemplate,
+      deleteTemplate,
+      useTemplate,
       settings,
       updateSettings,
     ],

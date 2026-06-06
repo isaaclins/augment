@@ -1,14 +1,17 @@
 import { useState } from "react";
 import { useAugment, type View } from "../state/augment";
 import { formatRelative } from "../lib/time";
+import { formatCombo } from "../lib/keybinds";
 import {
   ClockIcon,
   CloseIcon,
   EyeIcon,
+  FileIcon,
   FolderIcon,
   InboxIcon,
   MailIcon,
   PlusIcon,
+  SettingsIcon,
   SlidersIcon,
 } from "./icons";
 import type { ReactNode } from "react";
@@ -24,6 +27,7 @@ const NAV: NavItem[] = [
   { id: "snoozed", label: "Snoozed", icon: <ClockIcon size={17} /> },
   { id: "watching", label: "Watching", icon: <EyeIcon size={17} /> },
   { id: "rules", label: "Rules", icon: <SlidersIcon size={17} /> },
+  { id: "templates", label: "Templates", icon: <FileIcon size={17} /> },
 ];
 
 export function Sidebar() {
@@ -40,6 +44,7 @@ export function Sidebar() {
     createFolder,
     removeFolder,
     openFolder,
+    settings,
   } = useAugment();
 
   const [adding, setAdding] = useState(false);
@@ -73,18 +78,22 @@ export function Sidebar() {
       </div>
 
       <nav className="sidebar-nav">
-        {NAV.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            className={`nav-item ${view === item.id ? "nav-item-active" : ""}`}
-            onClick={() => setView(item.id)}
-          >
-            <span className="nav-icon">{item.icon}</span>
-            <span className="nav-label">{item.label}</span>
-            {counts[item.id] ? <span className="nav-count">{counts[item.id]}</span> : null}
-          </button>
-        ))}
+        {NAV.map((item) => {
+          const shortcut = (settings.keybinds as Record<string, string | undefined>)[item.id];
+          return (
+            <button
+              key={item.id}
+              type="button"
+              className={`nav-item ${view === item.id ? "nav-item-active" : ""}`}
+              onClick={() => setView(item.id)}
+            >
+              <span className="nav-icon">{item.icon}</span>
+              <span className="nav-label">{item.label}</span>
+              {counts[item.id] ? <span className="nav-count">{counts[item.id]}</span> : null}
+              {shortcut ? <kbd className="nav-shortcut">{formatCombo(shortcut)}</kbd> : null}
+            </button>
+          );
+        })}
       </nav>
 
       <div className="sidebar-folders">
@@ -161,6 +170,17 @@ export function Sidebar() {
           ))}
         </div>
       </div>
+
+      <button
+        type="button"
+        className={`nav-item sidebar-settings ${view === "settings" ? "nav-item-active" : ""}`}
+        onClick={() => setView("settings")}
+      >
+        <span className="nav-icon">
+          <SettingsIcon size={17} />
+        </span>
+        <span className="nav-label">Settings</span>
+      </button>
 
       <div className="sidebar-account">
         <div className="account-email" title={email ?? ""}>

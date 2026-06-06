@@ -4,8 +4,11 @@
 // transparently refresh once and retry.
 
 import type {
+  GmailDraft,
   GmailLabel,
   GmailLabelsListResponse,
+  GmailMessage,
+  GmailMessagesListResponse,
   GmailProfile,
   GmailThread,
   GmailThreadsListResponse,
@@ -89,6 +92,39 @@ export class GmailClient {
       params.append("metadataHeaders", header);
     }
     return this.request<GmailThread>(`/threads/${encodeURIComponent(id)}?${params.toString()}`);
+  }
+
+  listMessages(query: string, maxResults = 100): Promise<GmailMessagesListResponse> {
+    const params = new URLSearchParams({ q: query, maxResults: String(maxResults) });
+    return this.request<GmailMessagesListResponse>(`/messages?${params.toString()}`);
+  }
+
+  getMessage(id: string): Promise<GmailMessage> {
+    return this.request<GmailMessage>(`/messages/${encodeURIComponent(id)}?format=full`);
+  }
+
+  /**
+   * Insert a message straight into the mailbox (like IMAP APPEND) — this does
+   * NOT send anything. Used to store templates as labeled messages.
+   */
+  insertMessage(raw: string, labelIds: string[]): Promise<GmailMessage> {
+    return this.request<GmailMessage>("/messages", {
+      method: "POST",
+      body: JSON.stringify({ raw, labelIds }),
+    });
+  }
+
+  /** Move a message to Trash (reversible; works under gmail.modify). */
+  trashMessage(id: string): Promise<GmailMessage> {
+    return this.request<GmailMessage>(`/messages/${encodeURIComponent(id)}/trash`, { method: "POST" });
+  }
+
+  /** Create a draft (not sent) from a base64url RFC 2822 message. */
+  createDraft(raw: string): Promise<GmailDraft> {
+    return this.request<GmailDraft>("/drafts", {
+      method: "POST",
+      body: JSON.stringify({ message: { raw } }),
+    });
   }
 
   listLabels(): Promise<GmailLabelsListResponse> {

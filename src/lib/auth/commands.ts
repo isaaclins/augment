@@ -16,6 +16,11 @@ export function startOAuth(): Promise<OauthResult> {
   return invoke<OauthResult>("start_oauth");
 }
 
+/** Abort an in-progress sign-in (the `startOAuth` promise then rejects). */
+export function cancelOAuth(): Promise<void> {
+  return invoke<void>("cancel_oauth");
+}
+
 /** Silently mint a new access token from the stored/in-memory refresh token. */
 export function refreshAccessToken(): Promise<OauthResult> {
   return invoke<OauthResult>("refresh_access_token");

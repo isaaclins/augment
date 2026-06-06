@@ -10,7 +10,8 @@ mod scheduler;
 mod secrets;
 
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use tauri::{Manager, State};
@@ -26,11 +27,20 @@ pub struct AppState {
     pub creds: Mutex<Option<oauth::OauthCreds>>,
     pub schedule: Mutex<Vec<scheduler::ScheduleItem>>,
     pub store_path: PathBuf,
+    /// Set by `cancel_oauth` to abort an in-progress interactive sign-in.
+    pub oauth_cancel: Arc<AtomicBool>,
 }
 
 #[tauri::command]
 async fn start_oauth(state: State<'_, AppState>) -> Result<oauth::OauthResult, AppError> {
-    oauth::run_login(&state.http, &state.refresh_token, &state.creds).await
+    oauth::run_login(&state.http, &state.refresh_token, &state.creds, &state.oauth_cancel).await
+}
+
+/// Abort an in-progress interactive sign-in (the loopback wait in `oauth.rs`
+/// polls this flag), so a stuck or abandoned flow can be dismissed immediately.
+#[tauri::command]
+fn cancel_oauth(state: State<'_, AppState>) {
+    state.oauth_cancel.store(true, Ordering::SeqCst);
 }
 
 #[tauri::command]
@@ -89,6 +99,7 @@ pub fn run() {
                 creds: Mutex::new(creds),
                 schedule: Mutex::new(items),
                 store_path,
+                oauth_cancel: Arc::new(AtomicBool::new(false)),
             });
 
             scheduler::spawn_ticker(handle.clone());
@@ -96,6 +107,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             start_oauth,
+            cancel_oauth,
             refresh_access_token,
             clear_session,
             scheduler::schedule_list,

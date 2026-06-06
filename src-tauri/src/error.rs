@@ -17,6 +17,9 @@ pub enum AppError {
     #[error("timed out waiting for the Google sign-in to complete")]
     OauthTimeout,
 
+    #[error("sign-in cancelled")]
+    OauthCancelled,
+
     #[error("no active session to refresh — sign in first")]
     NoSession,
 

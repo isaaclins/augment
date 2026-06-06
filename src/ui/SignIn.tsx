@@ -9,7 +9,7 @@ const FEATURES = [
 ];
 
 export function SignIn() {
-  const { status, error, signIn } = useAugment();
+  const { status, error, signIn, cancelSignIn } = useAugment();
   const authenticating = status === "authenticating";
 
   return (
@@ -42,7 +42,12 @@ export function SignIn() {
         </button>
 
         {authenticating && (
-          <p className="signin-hint">A browser window opened — approve access, then return here.</p>
+          <>
+            <p className="signin-hint">A browser window opened — approve access, then return here.</p>
+            <button className="signin-cancel" type="button" onClick={() => cancelSignIn()}>
+              Cancel
+            </button>
+          </>
         )}
         {status === "error" && error && <p className="signin-error">{error}</p>}
 

@@ -4,6 +4,7 @@
 // because the Rust scheduler must read them without the webview.
 
 import type { Rule } from "./rules/types";
+import { DEFAULT_KEYBINDS, type Keybinds } from "./keybinds";
 
 const RULES_KEY = "augment.rules.v1";
 const SETTINGS_KEY = "augment.settings.v1";
@@ -21,11 +22,14 @@ export interface Settings {
   autoApplyRules: boolean;
   /** Gmail label used to hold snoozed threads. */
   snoozeLabel: string;
+  /** Keyboard shortcut (combo string) for each navigable view. */
+  keybinds: Keybinds;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   autoApplyRules: false,
   snoozeLabel: "Augment/Snoozed",
+  keybinds: DEFAULT_KEYBINDS,
 };
 
 function readJson<T>(key: string, fallback: T): T {
@@ -60,7 +64,9 @@ export function saveRules(rules: Rule[]): void {
 }
 
 export function loadSettings(): Settings {
-  return readJson<Settings>(SETTINGS_KEY, DEFAULT_SETTINGS);
+  const settings = readJson<Settings>(SETTINGS_KEY, DEFAULT_SETTINGS);
+  // Backfill any missing shortcut so older/partial stored settings keep working.
+  return { ...settings, keybinds: { ...DEFAULT_KEYBINDS, ...settings.keybinds } };
 }
 
 export function saveSettings(settings: Settings): void {

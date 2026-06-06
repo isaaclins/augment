@@ -13,6 +13,22 @@ export interface GmailThreadsListResponse {
   resultSizeEstimate?: number;
 }
 
+export interface GmailMessageRef {
+  id: string;
+  threadId: string;
+}
+
+export interface GmailMessagesListResponse {
+  messages?: GmailMessageRef[];
+  nextPageToken?: string;
+  resultSizeEstimate?: number;
+}
+
+export interface GmailDraft {
+  id: string;
+  message?: GmailMessage;
+}
+
 export interface GmailHeader {
   name: string;
   value: string;
