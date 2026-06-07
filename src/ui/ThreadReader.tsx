@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useAugment } from "../state/augment";
 import { addressLabel, type ParsedMessage } from "../lib/gmail/parse";
 import { formatDateTime } from "../lib/time";
@@ -6,7 +6,34 @@ import { SNOOZE_PRESETS, WATCH_PRESETS } from "../lib/time";
 import { EmailView } from "./EmailView";
 import { DurationMenu } from "./DurationMenu";
 import { Avatar } from "./Avatar";
-import { ArchiveIcon, ClockIcon, CloseIcon, ExternalIcon, EyeIcon, MailIcon } from "./icons";
+import { useClickOutside } from "./hooks";
+import { ArchiveIcon, ClockIcon, CloseIcon, EyeIcon, MailIcon } from "./icons";
+
+// The "⋯" overflow for secondary reader actions (Reply all / Forward / Open in
+// Gmail) so the bar leads with the triage actions (UI-AUDIT H3).
+function OverflowMenu({ children }: { children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const ref = useClickOutside<HTMLDivElement>(() => setOpen(false));
+  return (
+    <div className="menu reader-overflow" ref={ref}>
+      <button
+        className="action-btn"
+        type="button"
+        title="More actions"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+      >
+        <span aria-hidden>⋯</span>
+      </button>
+      {open && (
+        <div className="menu-pop menu-pop-right" role="menu" onClick={() => setOpen(false)}>
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function MessageRail({
   messages,
@@ -102,15 +129,9 @@ export function ThreadReader() {
             <MailIcon size={15} />
             <span>Reply</span>
           </button>
-          {active.to.length + active.cc.length > 1 && (
-            <button className="action-btn" type="button" onClick={() => composeReply("replyAll", active)}>
-              <MailIcon size={15} />
-              <span>Reply all</span>
-            </button>
-          )}
-          <button className="action-btn" type="button" onClick={() => composeReply("forward", active)}>
-            <ExternalIcon size={15} />
-            <span>Forward</span>
+          <button className="action-btn" type="button" onClick={() => void archiveThread(selectedId)}>
+            <ArchiveIcon size={15} />
+            <span>Archive</span>
           </button>
           <DurationMenu
             label="Snooze"
@@ -127,14 +148,19 @@ export function ThreadReader() {
             presets={WATCH_PRESETS}
             onPick={(dueAt, preset) => void watch(selectedId, subject, dueAt, preset.indefinite)}
           />
-          <button className="action-btn" type="button" onClick={() => void archiveThread(selectedId)}>
-            <ArchiveIcon size={15} />
-            <span>Archive</span>
-          </button>
-          <button className="action-btn" type="button" onClick={() => void openInGmail(selectedId)}>
-            <ExternalIcon size={15} />
-            <span>Open in Gmail</span>
-          </button>
+          <OverflowMenu>
+            {active.to.length + active.cc.length > 1 && (
+              <button className="menu-item" type="button" role="menuitem" onClick={() => composeReply("replyAll", active)}>
+                Reply all
+              </button>
+            )}
+            <button className="menu-item" type="button" role="menuitem" onClick={() => composeReply("forward", active)}>
+              Forward
+            </button>
+            <button className="menu-item" type="button" role="menuitem" onClick={() => void openInGmail(selectedId)}>
+              Open in Gmail
+            </button>
+          </OverflowMenu>
         </div>
 
         <div className="reader-meta">
