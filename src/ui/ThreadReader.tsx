@@ -49,8 +49,13 @@ export function ThreadReader() {
   if (!selectedId) {
     return (
       <div className="reader reader-empty">
-        <MailIcon size={30} />
-        <p>Select a conversation to read it here.</p>
+        <div className="empty-state">
+          <span className="empty-state-icon">
+            <MailIcon size={24} />
+          </span>
+          <p className="empty-state-title">No conversation open</p>
+          <p className="empty-state-text">Select a thread on the left to read it here.</p>
+        </div>
       </div>
     );
   }
@@ -58,8 +63,12 @@ export function ThreadReader() {
   if (!reader || reader.loading) {
     return (
       <div className="reader reader-empty">
-        <div className="spinner" />
-        <p>Loading conversation…</p>
+        <div className="dot-pulse" aria-label="Loading">
+          <span />
+          <span />
+          <span />
+        </div>
+        <p>Loading conversation</p>
       </div>
     );
   }

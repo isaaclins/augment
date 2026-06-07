@@ -68,6 +68,26 @@ function MoveMenu() {
   );
 }
 
+// Skeleton placeholder shown while the first page of mail loads. Mirrors the
+// row shape (avatar + three lines) so the layout doesn't jump when real rows
+// arrive. Decorative, so it's hidden from assistive tech.
+function InboxSkeleton() {
+  return (
+    <div className="skeleton" aria-hidden>
+      {Array.from({ length: 7 }).map((_, i) => (
+        <div className="skel-row" key={i}>
+          <div className="skel-avatar" />
+          <div className="skel-body">
+            <div className="skel-line skel-line-sm" />
+            <div className="skel-line skel-line-lg" />
+            <div className="skel-line skel-line-md" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function InboxView() {
   const {
     rows,
@@ -359,14 +379,28 @@ export function InboxView() {
         )}
 
         <div className="list-scroll" onScroll={onScroll}>
-          {rows.length === 0 && inboxLoading && <div className="list-empty">Loading…</div>}
+          {rows.length === 0 && inboxLoading && <InboxSkeleton />}
           {rows.length === 0 && !inboxLoading && (
-            <div className="list-empty">
-              {view === "folder"
-                ? "This folder is empty."
-                : view === "tag"
-                  ? "Nothing tagged here yet."
-                  : "Inbox zero. 🎉"}
+            <div className="empty-state">
+              <span className="empty-state-icon">
+                {view === "folder" ? (
+                  <FolderIcon size={24} />
+                ) : view === "tag" ? (
+                  <TagIcon size={24} />
+                ) : (
+                  <MailIcon size={24} />
+                )}
+              </span>
+              <p className="empty-state-title">
+                {view === "folder" ? "Empty folder" : view === "tag" ? "No tagged mail" : "Inbox zero"}
+              </p>
+              <p className="empty-state-text">
+                {view === "folder"
+                  ? "Nothing filed here yet. Move threads in from the inbox."
+                  : view === "tag"
+                    ? "Tag a thread and it will show up here."
+                    : "You are all caught up. New mail lands here."}
+              </p>
             </div>
           )}
 

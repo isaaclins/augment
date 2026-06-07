@@ -32,7 +32,10 @@ export function SchedulePanel({ kind }: { kind: ScheduleKind }) {
       </div>
 
       {items.length === 0 ? (
-        <div className="panel-empty">{copy.empty}</div>
+        <div className="panel-empty">
+          {copy.icon()}
+          <p>{copy.empty}</p>
+        </div>
       ) : (
         <div className="panel-list">
           {items.map((item) => {
