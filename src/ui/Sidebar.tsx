@@ -1,17 +1,14 @@
 import { useState } from "react";
 import { useAugment, type View } from "../state/augment";
-import { formatRelative } from "../lib/time";
 import { formatCombo } from "../lib/keybinds";
 import type { Tag } from "../lib/tags";
 import { openSettingsWindow } from "../lib/window";
 import { TagGlyph } from "./tags";
 import { TagEditor } from "./TagEditor";
 import {
-  BoltIcon,
   ClockIcon,
   CloseIcon,
   EyeIcon,
-  FileIcon,
   FolderIcon,
   InboxIcon,
   MailIcon,
@@ -33,10 +30,14 @@ const NAV: NavItem[] = [
   { id: "inbox", label: "Inbox", icon: <InboxIcon size={17} /> },
   { id: "snoozed", label: "Snoozed", icon: <ClockIcon size={17} /> },
   { id: "watching", label: "Watching", icon: <EyeIcon size={17} /> },
-  { id: "rules", label: "Rules", icon: <SlidersIcon size={17} /> },
-  { id: "templates", label: "Templates", icon: <FileIcon size={17} /> },
-  { id: "quickActions", label: "Quick Actions", icon: <BoltIcon size={17} /> },
+  // Rules, Templates, and Quick Actions are configuration, not daily views —
+  // one "Setup" entry opens them as tabs (see SetupView). The id stays "rules"
+  // so ⌘4 and the keybind chip keep working.
+  { id: "rules", label: "Setup", icon: <SlidersIcon size={17} /> },
 ];
+
+// Views that the single "Setup" nav entry stands in for.
+const SETUP_VIEWS = new Set<View>(["rules", "templates", "quickActions"]);
 
 export function Sidebar() {
   const {
@@ -45,8 +46,6 @@ export function Sidebar() {
     email,
     signOut,
     schedule,
-    rules,
-    activity,
     folders,
     activeFolderId,
     createFolder,
@@ -68,7 +67,6 @@ export function Sidebar() {
     inbox: null,
     snoozed: schedule.filter((s) => s.kind === "snooze").length,
     watching: schedule.filter((s) => s.kind === "watch").length,
-    rules: rules.filter((r) => r.enabled).length,
   };
 
   function submitFolder() {
@@ -94,11 +92,12 @@ export function Sidebar() {
       <nav className="sidebar-nav">
         {NAV.map((item) => {
           const shortcut = (settings.keybinds as Record<string, string | undefined>)[item.id];
+          const active = item.id === "rules" ? SETUP_VIEWS.has(view) : view === item.id;
           return (
             <button
               key={item.id}
               type="button"
-              className={`nav-item ${view === item.id ? "nav-item-active" : ""}`}
+              className={`nav-item ${active ? "nav-item-active" : ""}`}
               onClick={() => setView(item.id)}
             >
               <span className="nav-icon">{item.icon}</span>
@@ -224,20 +223,6 @@ export function Sidebar() {
               </div>
             );
           })}
-        </div>
-      </div>
-
-      <div className="sidebar-activity">
-        <div className="sidebar-activity-head">Activity</div>
-        <div className="sidebar-activity-list">
-          {activity.length === 0 && <div className="activity-empty">Nothing yet.</div>}
-          {activity.slice(0, 6).map((entry) => (
-            <div key={entry.id} className={`activity-row activity-${entry.tone}`}>
-              <span className="activity-dot" />
-              <span className="activity-text">{entry.text}</span>
-              <span className="activity-time">{formatRelative(entry.ts)}</span>
-            </div>
-          ))}
         </div>
       </div>
 

@@ -6,9 +6,7 @@ import { InboxView } from "./InboxView";
 import { AssistantPanel } from "./AssistantPanel";
 import { Composer } from "./Composer";
 import { SchedulePanel } from "./SchedulePanel";
-import { RulesManager } from "./RulesManager";
-import { TemplatesManager } from "./TemplatesManager";
-import { QuickActionsManager } from "./QuickActionsManager";
+import { SetupView } from "./SetupView";
 
 // App-wide navigation shortcuts (⌘1–4 by default). We ignore keypresses while
 // the user is typing or recording a new binding so they don't steal the keys.
@@ -65,9 +63,7 @@ export function Workspace() {
         {(view === "inbox" || view === "folder" || view === "tag") && <InboxView />}
         {view === "snoozed" && <SchedulePanel kind="snooze" />}
         {view === "watching" && <SchedulePanel kind="watch" />}
-        {view === "rules" && <RulesManager />}
-        {view === "templates" && <TemplatesManager />}
-        {view === "quickActions" && <QuickActionsManager />}
+        {(view === "rules" || view === "templates" || view === "quickActions") && <SetupView />}
       </main>
       <AssistantPanel />
       <Composer />

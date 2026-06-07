@@ -530,6 +530,21 @@ h3 {
   flex-direction: column;
   padding: 6px 12px 12px;
   gap: 6px;
+  overflow-y: auto;
+}
+
+/* Tags take the remaining height so Settings + account stay pinned to the
+   bottom; the tag list scrolls if it overflows. */
+.sidebar-tags {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-tags .tag-list {
+  overflow-y: auto;
+  min-height: 0;
 }
 
 .sidebar-brand {
@@ -728,75 +743,7 @@ h3 {
   color: var(--danger);
 }
 
-.sidebar-activity {
-  margin-top: 14px;
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.sidebar-activity-head {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--text-tertiary);
-  padding: 0 8px 8px;
-  font-weight: 600;
-}
-
-.sidebar-activity-list {
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 0 4px;
-}
-
-.activity-empty {
-  color: var(--text-tertiary);
-  font-size: 12px;
-  padding: 0 4px;
-}
-
-.activity-row {
-  display: grid;
-  grid-template-columns: 8px 1fr auto;
-  gap: 7px;
-  align-items: start;
-  font-size: 11.5px;
-  color: var(--text-secondary);
-  line-height: 1.35;
-}
-
-.activity-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  margin-top: 4px;
-  background: var(--text-tertiary);
-}
-
-.activity-success .activity-dot {
-  background: var(--success);
-}
-.activity-warn .activity-dot {
-  background: var(--warn);
-}
-
-.activity-text {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-}
-
-.activity-time {
-  color: var(--text-tertiary);
-  white-space: nowrap;
-  font-size: 10.5px;
-}
+/* Activity log was cut (UI-AUDIT H1) — its effects are visible in the list. */
 
 .sidebar-account {
   border-top: 1px solid var(--border);
@@ -3980,4 +3927,63 @@ h3 {
   to {
     background-position: 0 0;
   }
+}
+
+/* ============================================================ Setup (merged
+   Rules / Templates / Quick Actions — UI-AUDIT H2). */
+
+.setup {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+}
+
+.setup-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 8px 12px 0;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.setup-tab {
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  padding: 8px 14px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color var(--t-fast) var(--ease-out), border-color var(--t-fast) var(--ease-out);
+}
+
+.setup-tab:hover {
+  color: var(--text);
+}
+
+.setup-tab.is-active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.setup-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.setup-body > .panel {
+  flex: 1;
+  min-height: 0;
+}
+
+/* The tab already names the section; drop the manager's duplicate h2 title
+   but keep its head row (which holds the section's actions). */
+.setup-body .panel-head h2 {
+  display: none;
 }
