@@ -1,15 +1,18 @@
 import { useState } from "react";
 import { useAugment } from "../state/augment";
 import { newId } from "../lib/store";
-import type {
-  Rule,
-  RuleAction,
-  RuleCondition,
-  RuleField,
-  RuleMatchMode,
-  RuleOperator,
+import {
+  conditionNode,
+  emptyGroup,
+  type Rule,
+  type RuleAction,
+  type RuleConditionNode,
+  type RuleField,
+  type RuleGroup,
+  type RuleNode,
+  type RuleOperator,
 } from "../lib/rules/types";
-import { CheckIcon, PlusIcon, RefreshIcon, SlidersIcon, TrashIcon } from "./icons";
+import { CheckIcon, CloseIcon, PlusIcon, RefreshIcon, SlidersIcon, TrashIcon } from "./icons";
 
 const FIELDS: { value: RuleField; label: string }[] = [
   { value: "from", label: "From" },
@@ -39,8 +42,7 @@ function blankRule(): Rule {
     id: newId(),
     name: "New rule",
     enabled: true,
-    matchMode: "all",
-    conditions: [{ field: "from", operator: "contains", value: "" }],
+    match: { kind: "group", match: "all", children: [conditionNode()] },
     actions: [{ type: "addLabel", label: "Augment/Flagged" }],
   };
 }
@@ -58,16 +60,165 @@ function describeAction(action: RuleAction): string {
   }
 }
 
+const opLabel = (op: RuleOperator) => OPERATORS.find((o) => o.value === op)?.label ?? op;
+
+/** Render a node as a bracketed boolean expression, e.g.
+ *  (from contains "x") OR ((to contains "y") AND (subject contains "z")). */
+function summarizeNode(node: RuleNode): string {
+  if (node.kind === "condition") return `${node.field} ${opLabel(node.operator)} “${node.value}”`;
+  if (node.children.length === 0) return "";
+  const inner = node.children.map(summarizeNode).filter(Boolean).join(node.match === "all" ? " AND " : " OR ");
+  return node.children.length > 1 ? `(${inner})` : inner;
+}
+
 function summarize(rule: Rule): string {
-  const conds = rule.conditions
-    .map((c) => `${c.field} ${OPERATORS.find((o) => o.value === c.operator)?.label ?? c.operator} “${c.value}”`)
-    .join(rule.matchMode === "all" ? " AND " : " OR ");
+  // Drop the outer brackets at the root for readability.
+  const conds =
+    rule.match.children
+      .map(summarizeNode)
+      .filter(Boolean)
+      .join(rule.match.match === "all" ? " AND " : " OR ") || "no conditions";
   const acts = rule.actions.map(describeAction).join(", ");
-  return `${conds || "no conditions"} → ${acts || "no actions"}`;
+  return `${conds} → ${acts || "no actions"}`;
+}
+
+function collectConditions(node: RuleNode): RuleConditionNode[] {
+  return node.kind === "condition" ? [node] : node.children.flatMap(collectConditions);
 }
 
 function defaultAction(type: RuleAction["type"]): RuleAction {
   return type === "addLabel" ? { type: "addLabel", label: "" } : { type };
+}
+
+function ConditionRow({
+  condition,
+  onChange,
+  onRemove,
+}: {
+  condition: RuleConditionNode;
+  onChange: (next: RuleConditionNode) => void;
+  onRemove: () => void;
+}) {
+  return (
+    <div className="cond-row">
+      <select
+        className="select"
+        value={condition.field}
+        onChange={(e) => onChange({ ...condition, field: e.target.value as RuleField })}
+      >
+        {FIELDS.map((f) => (
+          <option key={f.value} value={f.value}>
+            {f.label}
+          </option>
+        ))}
+      </select>
+      <select
+        className="select"
+        value={condition.operator}
+        onChange={(e) => onChange({ ...condition, operator: e.target.value as RuleOperator })}
+      >
+        {OPERATORS.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+      <input
+        className="input"
+        value={condition.value}
+        placeholder="value"
+        onChange={(e) => onChange({ ...condition, value: e.target.value })}
+      />
+      <button className="icon-btn" type="button" title="Remove condition" onClick={onRemove}>
+        <TrashIcon size={14} />
+      </button>
+    </div>
+  );
+}
+
+/** Recursive editor for a boolean group. Nested groups render as indented,
+ *  bracketed boxes so the structure reads like A OR (B AND C). */
+function GroupEditor({
+  group,
+  depth,
+  onChange,
+  onRemove,
+}: {
+  group: RuleGroup;
+  depth: number;
+  onChange: (next: RuleGroup) => void;
+  onRemove?: () => void;
+}) {
+  const setChild = (index: number, child: RuleNode) =>
+    onChange({ ...group, children: group.children.map((c, i) => (i === index ? child : c)) });
+  const removeChild = (index: number) =>
+    onChange({ ...group, children: group.children.filter((_, i) => i !== index) });
+
+  return (
+    <div className={`rule-group ${depth > 0 ? "rule-group-nested" : ""}`}>
+      <div className="rule-group-head">
+        <span className="rule-group-label">{depth === 0 ? "Match" : "where"}</span>
+        <select
+          className="select rule-group-mode"
+          value={group.match}
+          onChange={(e) => onChange({ ...group, match: e.target.value as RuleGroup["match"] })}
+        >
+          <option value="all">ALL</option>
+          <option value="any">ANY</option>
+        </select>
+        <span className="rule-group-label">of:</span>
+        {onRemove && (
+          <button className="icon-btn rule-group-remove" type="button" title="Remove group" onClick={onRemove}>
+            <CloseIcon size={13} />
+          </button>
+        )}
+      </div>
+
+      <div className="rule-group-children">
+        {group.children.length === 0 && (
+          <div className="rule-group-empty">Empty group — add a condition or group below.</div>
+        )}
+        {group.children.map((child, index) => (
+          <div className="rule-node" key={index}>
+            {index > 0 && <div className="rule-joiner">{group.match === "all" ? "AND" : "OR"}</div>}
+            {child.kind === "group" ? (
+              <GroupEditor
+                group={child}
+                depth={depth + 1}
+                onChange={(next) => setChild(index, next)}
+                onRemove={() => removeChild(index)}
+              />
+            ) : (
+              <ConditionRow
+                condition={child}
+                onChange={(next) => setChild(index, next)}
+                onRemove={() => removeChild(index)}
+              />
+            )}
+          </div>
+        ))}
+      </div>
+
+      <div className="rule-group-add">
+        <button
+          className="link-btn"
+          type="button"
+          onClick={() => onChange({ ...group, children: [...group.children, conditionNode({ field: "subject" })] })}
+        >
+          <PlusIcon size={13} /> condition
+        </button>
+        <button
+          className="link-btn"
+          type="button"
+          onClick={() =>
+            onChange({ ...group, children: [...group.children, emptyGroup(group.match === "all" ? "any" : "all")] })
+          }
+        >
+          <PlusIcon size={13} /> group
+        </button>
+      </div>
+    </div>
+  );
 }
 
 function RuleEditor({
@@ -82,14 +233,15 @@ function RuleEditor({
   const [draft, setDraft] = useState<Rule>(initial);
 
   const update = (patch: Partial<Rule>) => setDraft((prev) => ({ ...prev, ...patch }));
-
-  const updateCondition = (index: number, patch: Partial<RuleCondition>) =>
-    update({ conditions: draft.conditions.map((c, i) => (i === index ? { ...c, ...patch } : c)) });
-
   const updateAction = (index: number, action: RuleAction) =>
     update({ actions: draft.actions.map((a, i) => (i === index ? action : a)) });
 
-  const canSave = draft.name.trim().length > 0 && draft.conditions.every((c) => c.value.trim().length > 0 || c.operator === "matches") && draft.actions.length > 0;
+  const conditions = collectConditions(draft.match);
+  const canSave =
+    draft.name.trim().length > 0 &&
+    conditions.length > 0 &&
+    conditions.every((c) => c.value.trim().length > 0 || c.operator === "matches") &&
+    draft.actions.length > 0;
 
   return (
     <div className="rule-editor">
@@ -100,72 +252,13 @@ function RuleEditor({
           onChange={(e) => update({ name: e.target.value })}
           placeholder="Rule name"
         />
-        <label className="match-mode">
-          Match
-          <select
-            className="select"
-            value={draft.matchMode}
-            onChange={(e) => update({ matchMode: e.target.value as RuleMatchMode })}
-          >
-            <option value="all">all conditions</option>
-            <option value="any">any condition</option>
-          </select>
-        </label>
       </div>
 
       <div className="rule-section">
         <div className="rule-section-head">
           <span>When</span>
-          <button
-            className="link-btn"
-            type="button"
-            onClick={() => update({ conditions: [...draft.conditions, { field: "subject", operator: "contains", value: "" }] })}
-          >
-            <PlusIcon size={13} /> condition
-          </button>
         </div>
-        {draft.conditions.map((condition, index) => (
-          <div key={index} className="cond-row">
-            <select
-              className="select"
-              value={condition.field}
-              onChange={(e) => updateCondition(index, { field: e.target.value as RuleField })}
-            >
-              {FIELDS.map((f) => (
-                <option key={f.value} value={f.value}>
-                  {f.label}
-                </option>
-              ))}
-            </select>
-            <select
-              className="select"
-              value={condition.operator}
-              onChange={(e) => updateCondition(index, { operator: e.target.value as RuleOperator })}
-            >
-              {OPERATORS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-            <input
-              className="input"
-              value={condition.value}
-              placeholder="value"
-              onChange={(e) => updateCondition(index, { value: e.target.value })}
-            />
-            {draft.conditions.length > 1 && (
-              <button
-                className="icon-btn"
-                type="button"
-                title="Remove condition"
-                onClick={() => update({ conditions: draft.conditions.filter((_, i) => i !== index) })}
-              >
-                <TrashIcon size={14} />
-              </button>
-            )}
-          </div>
-        ))}
+        <GroupEditor group={draft.match} depth={0} onChange={(match) => update({ match })} />
       </div>
 
       <div className="rule-section">

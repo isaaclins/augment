@@ -3996,3 +3996,73 @@ h3 {
   line-height: 1.6;
   text-wrap: pretty;
 }
+
+/* ===================================================== Rule condition tree
+   Nested boolean groups rendered as indented, bracketed boxes with AND/OR
+   joiners, so a rule reads like  A OR (B AND C). */
+
+.rule-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rule-group-nested {
+  border-left: 2px solid var(--accent);
+  background: var(--bg-hover);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+}
+
+.rule-group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rule-group-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-tertiary);
+}
+
+.rule-group-mode {
+  width: auto;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.rule-group-remove {
+  margin-left: auto;
+}
+
+.rule-group-children {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rule-node {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rule-joiner {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--accent);
+}
+
+.rule-group-empty {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.rule-group-add {
+  display: flex;
+  gap: 14px;
+}

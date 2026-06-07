@@ -4,7 +4,8 @@
 // because the Rust scheduler must read them without the webview.
 
 import type { QuickAction } from "./quickActions";
-import type { Rule } from "./rules/types";
+import type { Rule, StoredRule } from "./rules/types";
+import { normalizeRule } from "./rules/types";
 import type { Tag } from "./tags";
 import { normalizeLabel, type TriageResult } from "./features/triage";
 import type { AssistantMessage, AssistantMode } from "./features/assistant";
@@ -96,7 +97,9 @@ function writeJson(key: string, value: unknown): void {
 export function loadRules(): Rule[] {
   try {
     const raw = localStorage.getItem(RULES_KEY);
-    return raw ? (JSON.parse(raw) as Rule[]) : [];
+    if (!raw) return [];
+    // Migrate legacy flat rules (matchMode + conditions[]) to the tree shape.
+    return (JSON.parse(raw) as StoredRule[]).map(normalizeRule);
   } catch {
     return [];
   }

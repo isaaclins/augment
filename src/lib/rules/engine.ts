@@ -3,7 +3,7 @@
 
 import { addressLabel, htmlToText } from "../gmail/parse";
 import type { ParsedMessage } from "../gmail/parse";
-import type { Rule, RuleCondition, RuleTarget } from "./types";
+import type { Rule, RuleCondition, RuleNode, RuleTarget } from "./types";
 
 /** Build the normalized evaluation target from a parsed message. */
 export function ruleTargetFromMessage(message: ParsedMessage): RuleTarget {
@@ -54,15 +54,24 @@ export function evaluateCondition(condition: RuleCondition, target: RuleTarget):
   }
 }
 
-/** Does a rule match the target? Disabled rules and rules without conditions never match. */
+/** Evaluate one node of the condition tree. An empty group never matches, so an
+ *  incomplete (childless) group can't accidentally fire a rule — whether AND or
+ *  OR, empty means "no". */
+export function evaluateNode(node: RuleNode, target: RuleTarget): boolean {
+  if (node.kind === "group") {
+    if (node.children.length === 0) return false;
+    return node.match === "any"
+      ? node.children.some((child) => evaluateNode(child, target))
+      : node.children.every((child) => evaluateNode(child, target));
+  }
+  return evaluateCondition(node, target);
+}
+
+/** Does a rule match the target? Disabled rules and rules with an empty
+ *  condition tree never match. */
 export function ruleMatches(rule: Rule, target: RuleTarget): boolean {
   if (!rule.enabled) return false;
-  if (rule.conditions.length === 0) return false;
-
-  if (rule.matchMode === "any") {
-    return rule.conditions.some((c) => evaluateCondition(c, target));
-  }
-  return rule.conditions.every((c) => evaluateCondition(c, target));
+  return evaluateNode(rule.match, target);
 }
 
 /** All enabled rules whose conditions match, in declaration order. */
