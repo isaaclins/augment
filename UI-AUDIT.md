@@ -18,7 +18,7 @@ Scope: UI/IA only. Backend, Gmail integration, Ollama pipeline, and rules *logic
 | H2 | **Three manager nav destinations** — Rules, Templates, Quick Actions | **MERGE→ one "Setup" destination with tabs** | These are *configuration*, not places you live while triaging. Collapsing 3 sidebar entries → 1 deletes two destinations and groups all automation in one spot. Runtime is untouched (rules auto-run, quick actions fire by shortcut/⌘K/context-menu, templates are used from the composer). |
 | H3 | **Reader action bar** (7 buttons) | **TRIM to 4 + overflow** | Most-used triage actions (Archive, Snooze, Watch, Reply) stay obvious; Forward + Open-in-Gmail + Reply-all move into an overflow `⋯` menu. The most-used action must be the most obvious. |
 | H4 | **Sort keys** (6) | **CUT 3** | Date / Unread-first / Priority are triage signal. Sender / Subject / Label sorts are "find a specific thing" → that's what ⌘K search is for. Don't ship a sort axis for a job another control does better. |
-| H5 | **"Run triage now" button** (assistant header) | **MERGE→ refresh** | Triage already runs on refresh (a setting). A second manual trigger in a panel you may never open is a duplicate path to the same effect. |
+| H5 | **"Run triage now" button** (assistant header) | **KEEP** (audit reversed this) | First cut as a duplicate of refresh+auto-triage — then caught during verify: it is the *only* on-demand triage trigger when `triageAuto` is off, so cutting it removes a power-user capability (criterion 4: triage flows must still work). Kept. |
 | H6 | **Accent quick-pick swatches** (8) + reset, alongside a freeform color picker | **MERGE→ picker + reset** | Ten ways to set one value. The palette cards already give curated accents; the freeform picker covers everything else. Keep picker + "theme default", cut the 8 fixed chips. |
 
 **Folders vs Tags vs Triage categories** were examined as the obvious "duplicate taxonomy" target. Verdict: **KEEP both folders and tags** — they are genuinely different verbs (folder = file-away/remove-from-inbox; tag = classify-in-place) and the triage **category chip already de-dupes** against applied tags in code. Cutting either would remove real triage capability, not clutter. No change.
@@ -120,9 +120,9 @@ Scope: UI/IA only. Backend, Gmail integration, Ollama pipeline, and rules *logic
 | Element | Verdict | Justification |
 |---|---|---|
 | Drawer + header | **KEEP** | The AI surface. |
-| **"Run triage now" button** | **CUT** | H5 — duplicate of refresh+auto-triage. |
+| "Run triage now" button | **KEEP** | The on-demand triage path when auto-triage is off; not a true duplicate (see H5). |
 | Close (×) | **KEEP** | Needed. |
-| Mode selector (Ask/Request/Agent) | **MERGE→ 2 (Ask / Do)** | Three confirmation modes is one too many; "Request" (propose) and "Agent" (auto) collapse into one "Do" that always shows an Apply step. Fewer mental models. |
+| Mode selector (Ask/Request/Agent) | **DEFERRED → recommend MERGE Ask/Do** | Collapsing modes rewrites assistant action-flow *logic* (out of scope: UI/IA only) and the file is under concurrent edit. Logged, not built. |
 | Suggested-labels section + rows | **KEEP** | Core triage assist (approve AI labels in bulk). |
 | Approve / Skip per suggestion | **KEEP** | The action; correct inline. |
 | Chat log + bubbles | **KEEP** | The conversation. |
@@ -148,7 +148,7 @@ Scope: UI/IA only. Backend, Gmail integration, Ollama pipeline, and rules *logic
 | RTE: bullet / numbered list | **KEEP** | Common. |
 | RTE: Link | **KEEP** | Common. |
 | RTE: Clear formatting | **CUT** | Rarely used; paste-as-plain covers the real need. |
-| RTE: HTML source toggle `</>` | **RELOCATE→ Setup (templates only)** | Raw-HTML editing is a template-authoring power feature, not something you do mid-reply. Keep it where templates are authored, not in every compose. |
+| RTE: HTML source toggle `</>` | **SATISFIED (already templates-only)** | The RTE renders only in the template editor, which now lives in Setup — already exactly where templates are authored. No change needed. |
 
 ## 7. Setup destination — merged Rules / Templates / Quick Actions (H2)
 
@@ -220,13 +220,13 @@ Distinct user-visible elements/controls enumerated (excludes pure layout wrapper
 | Top-level nav destinations | 7 | 5 | −2 |
 | Inbox list (sort keys etc.) | 28 | 25 | −3 |
 | Reader action bar | 7 | 4 + overflow | −3 |
-| Assistant | 16 | 13 | −3 |
+| Assistant | 16 | 14 | −2 |
 | Composer / RTE | 19 | 17 | −2 |
 | Settings | 22 | 19 | −3 |
 | Search palette footer modes | 5 | 3 | −2 |
 | Sign-in | 11 | 8 | −3 |
 | EmailView | 4 | 3 | −1 |
-| **Total (audited surface)** | **~150** | **~120** | **−30 (~20%)** |
+| **Total (audited surface)** | **~150** | **~121** | **−29 (~19%)** |
 
 Element count is measurably lower. The biggest structural wins are H1 (cut the activity log) and H2 (7 nav destinations → 5).
 

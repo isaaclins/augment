@@ -15,7 +15,7 @@ import {
   describeAction,
   type AssistantMessage,
 } from "../lib/features/assistant";
-import { CheckIcon, CloseIcon, SparkleIcon } from "./icons";
+import { CheckIcon, CloseIcon, RefreshIcon, SparkleIcon } from "./icons";
 
 function ProposalCard({
   message,
@@ -72,6 +72,9 @@ export function AssistantPanel() {
     suggestions,
     approveSuggestion,
     skipSuggestion,
+    settings,
+    triaging,
+    runTriageNow,
     assistantMode,
     setAssistantMode,
     assistantMessages,
@@ -117,6 +120,12 @@ export function AssistantPanel() {
           <span>Assistant</span>
         </div>
         <div className="assistant-head-actions">
+          {settings.triageEnabled && (
+            <button type="button" className="link-btn" disabled={triaging} onClick={() => void runTriageNow()}>
+              <RefreshIcon size={13} className={triaging ? "spin" : undefined} />
+              {triaging ? "Triaging…" : "Run triage now"}
+            </button>
+          )}
           <button type="button" className="icon-btn" title="Close assistant" onClick={() => setAssistantOpen(false)}>
             <CloseIcon size={15} />
           </button>
