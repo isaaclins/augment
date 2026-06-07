@@ -124,6 +124,7 @@ export function InboxView() {
     addTagToThreads,
     triage,
     suggestions,
+    approveSuggestion,
     assistantOpen,
     setAssistantOpen,
     composeNew,
@@ -459,7 +460,13 @@ export function InboxView() {
                   )}
                   {(rowTriage || rowTags.length > 0) && (
                     <div className="row-tags">
-                      {showCat && catName && <CategoryChip name={catName} tag={catTag} />}
+                      {showCat && catName && (
+                        <CategoryChip
+                          name={catName}
+                          tag={catTag}
+                          onApprove={catTag ? undefined : () => void approveSuggestion(catName)}
+                        />
+                      )}
                       {rowTriage && <PriorityPill priority={rowTriage.priority} />}
                       {rowTags.map((tag) => (
                         <TagChip key={tag.id} tag={tag} />

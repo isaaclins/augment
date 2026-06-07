@@ -4066,3 +4066,26 @@ h3 {
   display: flex;
   gap: 14px;
 }
+
+/* Proposed triage chip as a one-click "add tag" affordance (the trailing +). */
+.triage-chip-addable {
+  cursor: pointer;
+}
+
+.triage-chip-add {
+  opacity: 0.5;
+  margin-left: 1px;
+}
+
+.triage-chip-addable:hover {
+  box-shadow: inset 0 0 0 1px currentColor;
+}
+
+.triage-chip-addable:hover .triage-chip-add {
+  opacity: 1;
+}
+
+.triage-chip-addable:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px currentColor;
+}
