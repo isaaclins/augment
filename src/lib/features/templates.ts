@@ -8,6 +8,7 @@
 import DOMPurify from "dompurify";
 
 import type { GmailClient } from "../gmail/client";
+import { base64, base64Url, encodeHeaderWord } from "../gmail/mime";
 import { htmlToText, parseMessage } from "../gmail/parse";
 
 export const TEMPLATE_LABEL = "Augment/Templates";
@@ -65,24 +66,6 @@ function escapeHtml(text: string): string {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
-}
-
-function base64(input: string): string {
-  const bytes = new TextEncoder().encode(input);
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary);
-}
-
-function base64Url(input: string): string {
-  return base64(input).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
-
-// RFC 2047 encode a header value when it contains non-ASCII characters.
-function encodeHeaderWord(value: string): string {
-  // eslint-disable-next-line no-control-regex
-  if (/^[\x00-\x7F]*$/.test(value)) return value;
-  return `=?UTF-8?B?${base64(value)}?=`;
 }
 
 /** Build the base64url-encoded RFC 2822 HTML message for insert / draft. */

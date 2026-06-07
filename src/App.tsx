@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useAugment } from "./state/augment";
 import { SignIn } from "./ui/SignIn";
 import { Workspace } from "./ui/Workspace";
+import { SearchPalette } from "./ui/SearchPalette";
 
 // Suppress the webview's native context menu (its "Reload / Inspect Element"),
 // so our own right-click menus are the only ones that show. Editable fields keep
@@ -35,7 +36,13 @@ function Shell() {
       </div>
     );
   }
-  return status === "ready" ? <Workspace /> : <SignIn />;
+  if (status !== "ready") return <SignIn />;
+  return (
+    <>
+      <Workspace />
+      <SearchPalette />
+    </>
+  );
 }
 
 export default function App() {

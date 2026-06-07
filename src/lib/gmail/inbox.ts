@@ -13,6 +13,8 @@ export interface ThreadRow {
   date: number; // epoch ms of the latest message
   unread: boolean;
   messageCount: number;
+  /** Union of every message's Gmail label ids — used to match applied tags. */
+  labelIds: string[];
 }
 
 export interface ThreadPage {
@@ -24,6 +26,7 @@ export interface ThreadPage {
 function rowFromMessages(id: string, snippet: string, messages: ParsedMessage[]): ThreadRow {
   const latest = messages[messages.length - 1];
   const unread = messages.some((m) => m.labelIds.includes(SystemLabel.Unread));
+  const labelIds = Array.from(new Set(messages.flatMap((m) => m.labelIds)));
   return {
     id,
     snippet,
@@ -32,6 +35,7 @@ function rowFromMessages(id: string, snippet: string, messages: ParsedMessage[])
     date: latest?.internalDate ?? 0,
     unread,
     messageCount: messages.length,
+    labelIds,
   };
 }
 

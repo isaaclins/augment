@@ -17,11 +17,20 @@ export interface ParsedMessage {
   internalDate: number; // epoch ms
   from: EmailAddress;
   to: EmailAddress[];
+  cc: EmailAddress[];
   subject: string;
   messageId?: string;
   html?: string;
   text?: string;
   isUnread: boolean;
+  hasAttachment?: boolean;
+}
+
+/** True if any part is a real attachment (has a filename and an attachment id). */
+export function hasAttachmentPart(part: GmailMessagePart | undefined): boolean {
+  if (!part) return false;
+  if (part.filename && part.filename.length > 0 && part.body?.attachmentId) return true;
+  return (part.parts ?? []).some(hasAttachmentPart);
 }
 
 /** Decode Gmail's base64url body data into a string, honouring the part charset. */
@@ -142,11 +151,13 @@ export function parseMessage(message: GmailMessage): ParsedMessage {
     internalDate: message.internalDate ? Number(message.internalDate) : 0,
     from: parseAddress(getHeader(headers, "From") ?? ""),
     to: parseAddressList(getHeader(headers, "To")),
+    cc: parseAddressList(getHeader(headers, "Cc")),
     subject: getHeader(headers, "Subject") ?? "(no subject)",
     messageId: getHeader(headers, "Message-ID"),
     html: bodies.html,
     text: bodies.text,
     isUnread: labelIds.includes(SystemLabel.Unread),
+    hasAttachment: hasAttachmentPart(message.payload),
   };
 }
 

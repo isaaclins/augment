@@ -8,10 +8,19 @@ export class Session {
   private accessToken: string | null = null;
   private expiresAtMs = 0;
   private email: string | null = null;
+  private scope = "";
 
   setTokens(result: OauthResult): void {
     this.accessToken = result.accessToken;
     this.expiresAtMs = Date.now() + result.expiresIn * 1000;
+    if (result.scope) this.scope = result.scope;
+  }
+
+  /** True when the granted scope includes sending. A best-effort hint — the
+   *  authoritative check is whether `messages.send` 403s at call time (a refresh
+   *  may omit scope, so an existing modify-only grant can read as send-capable). */
+  canSend(): boolean {
+    return /gmail\.send|gmail\.compose|mail\.google\.com/.test(this.scope);
   }
 
   setEmail(email: string): void {
