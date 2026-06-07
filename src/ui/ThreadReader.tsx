@@ -5,6 +5,7 @@ import { formatDateTime } from "../lib/time";
 import { SNOOZE_PRESETS, WATCH_PRESETS } from "../lib/time";
 import { EmailView } from "./EmailView";
 import { DurationMenu } from "./DurationMenu";
+import { Avatar } from "./Avatar";
 import { ArchiveIcon, ClockIcon, CloseIcon, ExternalIcon, EyeIcon, MailIcon } from "./icons";
 
 function MessageRail({
@@ -26,6 +27,7 @@ function MessageRail({
           className={`rail-item ${index === activeIndex ? "rail-item-active" : ""}`}
           onClick={() => onSelect(index)}
         >
+          <Avatar from={message.from} size={18} />
           <span className="rail-from">{addressLabel(message.from)}</span>
           <span className="rail-date">{formatDateTime(message.internalDate)}</span>
         </button>
@@ -114,7 +116,7 @@ export function ThreadReader() {
             label="Watch for reply"
             icon={<EyeIcon size={15} />}
             presets={WATCH_PRESETS}
-            onPick={(dueAt) => void watch(selectedId, subject, dueAt)}
+            onPick={(dueAt, preset) => void watch(selectedId, subject, dueAt, preset.indefinite)}
           />
           <button className="action-btn" type="button" onClick={() => void archiveThread(selectedId)}>
             <ArchiveIcon size={15} />
@@ -127,9 +129,12 @@ export function ThreadReader() {
         </div>
 
         <div className="reader-meta">
-          <div className="reader-from">
-            <span className="reader-from-name">{addressLabel(active.from)}</span>
-            <span className="reader-from-email">{active.from.email}</span>
+          <div className="reader-from-wrap">
+            <Avatar from={active.from} size={38} />
+            <div className="reader-from">
+              <span className="reader-from-name">{addressLabel(active.from)}</span>
+              <span className="reader-from-email">{active.from.email}</span>
+            </div>
           </div>
           <div className="reader-meta-right">
             {toLine && <span className="reader-to">to {toLine}</span>}

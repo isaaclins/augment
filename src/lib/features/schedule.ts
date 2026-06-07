@@ -34,14 +34,19 @@ export async function snoozeThread(
   return scheduleAdd({ kind: "snooze", threadId, subject, dueAt });
 }
 
-/** Watch a thread for a reply by `dueAt`. `watchSince` defaults to now. */
+/** How long an indefinite watch waits between reply-checks. */
+const WATCH_RECHECK_MS = 2 * 60 * 1000;
+
+/** Watch a thread for a reply. `indefinite` keeps re-checking forever (until a
+ *  reply lands) instead of firing a one-off "no reply by `dueAt`" notice. */
 export async function watchThread(
   threadId: string,
   subject: string,
   dueAt: number,
   watchSince = Date.now(),
+  indefinite = false,
 ): Promise<ScheduleItem> {
-  return scheduleAdd({ kind: "watch", threadId, subject, dueAt, watchSince });
+  return scheduleAdd({ kind: "watch", threadId, subject, dueAt, watchSince, indefinite });
 }
 
 // --- handling due items ----------------------------------------------------
@@ -65,7 +70,9 @@ export interface WatchOutcome {
   replied: boolean;
 }
 
-/** Check a watched thread for an inbound reply; notify if none arrived. */
+/** Check a watched thread for an inbound reply. On a reply, notify + stop. With
+ *  no reply: an indefinite watch re-schedules the next check (preserving when
+ *  watching began); a bounded watch fires a one-off "still no reply" notice. */
 export async function handleWatchDue(
   client: GmailClient,
   item: ScheduleItem,
@@ -79,11 +86,23 @@ export async function handleWatchDue(
     .map(parseMessage)
     .some((message) => message.from.email !== self && message.internalDate > since);
 
-  if (!replied) {
-    await notify("📭 Still no reply", item.subject);
+  if (replied) {
+    await notify("📬 They replied", item.subject);
+    await scheduleRemove(item.id);
+    return { replied: true };
   }
+
+  if (item.indefinite) {
+    // Keep watching: queue the next check, keep `watchSince` so a reply at any
+    // point still counts. No "no reply" notification — only a real reply pings.
+    await watchThread(item.threadId, item.subject, Date.now() + WATCH_RECHECK_MS, since, true);
+    await scheduleRemove(item.id);
+    return { replied: false };
+  }
+
+  await notify("📭 Still no reply", item.subject);
   await scheduleRemove(item.id);
-  return { replied };
+  return { replied: false };
 }
 
 /** Dispatch a due item to the right handler. Returns a short status string. */
@@ -97,7 +116,8 @@ export async function handleScheduleDue(
     return `Resurfaced “${item.subject}”`;
   }
   const outcome = await handleWatchDue(client, item, options.selfEmail);
-  return outcome.replied
-    ? `Reply received for “${item.subject}”`
+  if (outcome.replied) return `Reply received for “${item.subject}”`;
+  return item.indefinite
+    ? `Still watching “${item.subject}” for a reply`
     : `No reply yet for “${item.subject}” — notified`;
 }

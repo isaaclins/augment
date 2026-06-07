@@ -5,8 +5,11 @@
 export interface DurationPreset {
   id: string;
   label: string;
-  /** Milliseconds from "now" until the item is due. */
+  /** Milliseconds from "now" until the item is due (for indefinite watches, the
+   *  delay until the first reply-check). */
   offsetMs: number;
+  /** Watch only: keep re-checking forever until a reply actually arrives. */
+  indefinite?: boolean;
 }
 
 const SECOND = 1000;
@@ -30,6 +33,8 @@ export const WATCH_PRESETS: DurationPreset[] = [
   { id: "4h", label: "4 hours", offsetMs: 4 * HOUR },
   { id: "1d", label: "1 day", offsetMs: DAY },
   { id: "3d", label: "3 days", offsetMs: 3 * DAY },
+  // Re-checks every couple of minutes until a reply lands — even months later.
+  { id: "indef", label: "Until they reply", offsetMs: 2 * MINUTE, indefinite: true },
 ];
 
 /** Absolute due timestamp for a preset, relative to now. */

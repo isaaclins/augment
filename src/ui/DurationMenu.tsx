@@ -9,7 +9,7 @@ interface DurationMenuProps {
   label: string;
   icon: ReactNode;
   presets: DurationPreset[];
-  onPick: (dueAt: number) => void;
+  onPick: (dueAt: number, preset: DurationPreset) => void;
   align?: "left" | "right";
 }
 
@@ -32,7 +32,7 @@ export function DurationMenu({ label, icon, presets, onPick, align = "left" }: D
               role="menuitem"
               type="button"
               onClick={() => {
-                onPick(dueAtFromPreset(preset));
+                onPick(dueAtFromPreset(preset), preset);
                 setOpen(false);
               }}
             >

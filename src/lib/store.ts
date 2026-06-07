@@ -174,26 +174,55 @@ export function saveSkippedLabels(names: string[]): void {
   writeJson(SKIPPED_LABELS_KEY, names);
 }
 
-/** Persisted assistant conversation + selected mode (D9: survives restart). */
+/** A separate conversation per assistant mode. */
+export type AssistantThreads = Record<AssistantMode, AssistantMessage[]>;
+
+/** Persisted assistant conversations + selected mode (D9: survives restart).
+ *  Each mode (ask/request/agent) keeps its own thread. */
 export interface AssistantChat {
   mode: AssistantMode;
-  messages: AssistantMessage[];
+  threads: AssistantThreads;
+}
+
+function emptyThreads(): AssistantThreads {
+  return { ask: [], request: [], agent: [] };
 }
 
 export function loadAssistantChat(): AssistantChat {
   try {
     const raw = localStorage.getItem(ASSISTANT_KEY);
-    if (!raw) return { mode: "request", messages: [] };
-    const parsed = JSON.parse(raw) as Partial<AssistantChat>;
-    return { mode: parsed.mode ?? "request", messages: parsed.messages ?? [] };
+    if (!raw) return { mode: "request", threads: emptyThreads() };
+    const parsed = JSON.parse(raw) as {
+      mode?: AssistantMode;
+      threads?: Partial<AssistantThreads>;
+      messages?: AssistantMessage[];
+    };
+    const mode: AssistantMode = parsed.mode ?? "request";
+    const threads = emptyThreads();
+    if (parsed.threads) {
+      threads.ask = parsed.threads.ask ?? [];
+      threads.request = parsed.threads.request ?? [];
+      threads.agent = parsed.threads.agent ?? [];
+    } else if (Array.isArray(parsed.messages)) {
+      // Migrate the old single-thread format into the saved mode's thread.
+      threads[mode] = parsed.messages;
+    }
+    return { mode, threads };
   } catch {
-    return { mode: "request", messages: [] };
+    return { mode: "request", threads: emptyThreads() };
   }
 }
 
 export function saveAssistantChat(chat: AssistantChat): void {
-  // Keep the last 100 turns so the log can't grow without bound.
-  writeJson(ASSISTANT_KEY, { mode: chat.mode, messages: chat.messages.slice(-100) });
+  // Keep the last 100 turns per thread so the log can't grow without bound.
+  writeJson(ASSISTANT_KEY, {
+    mode: chat.mode,
+    threads: {
+      ask: chat.threads.ask.slice(-100),
+      request: chat.threads.request.slice(-100),
+      agent: chat.threads.agent.slice(-100),
+    },
+  });
 }
 
 export function clearAssistantChat(): void {

@@ -20,13 +20,17 @@ import { CheckIcon, CloseIcon, RefreshIcon, SparkleIcon } from "./icons";
 function ProposalCard({
   message,
   targetCount,
+  canUndo,
   onApply,
   onCancel,
+  onUndo,
 }: {
   message: AssistantMessage;
   targetCount: number;
+  canUndo: boolean;
   onApply: () => void;
   onCancel: () => void;
+  onUndo: () => void;
 }) {
   const actions = message.actions ?? [];
   return (
@@ -45,10 +49,17 @@ function ProposalCard({
             Cancel
           </button>
         </div>
-      ) : (
-        <div className="proposal-status">
-          {message.status === "applied" ? "Applied" : "Cancelled"}
+      ) : message.status === "applied" ? (
+        <div className="proposal-actions">
+          <span className="proposal-status">Applied</span>
+          {canUndo && (
+            <button type="button" className="link-btn" onClick={onUndo}>
+              Undo
+            </button>
+          )}
         </div>
+      ) : (
+        <div className="proposal-status">{message.status === "undone" ? "Undone" : "Cancelled"}</div>
       )}
     </div>
   );
@@ -72,6 +83,8 @@ export function AssistantPanel() {
     applyProposal,
     cancelProposal,
     clearAssistantChat,
+    undoableIds,
+    undoMessage,
     selectedIds,
   } = useAugment();
 
@@ -189,13 +202,26 @@ export function AssistantPanel() {
                   <ProposalCard
                     message={message}
                     targetCount={selectedIds.size}
+                    canUndo={undoableIds.has(message.id)}
                     onApply={() => void applyProposal(message.id)}
                     onCancel={() => cancelProposal(message.id)}
+                    onUndo={() => void undoMessage(message.id)}
                   />
                 )}
               </div>
             ))}
-            {assistantBusy && <div className="chat-msg chat-assistant"><div className="chat-bubble chat-thinking">Thinking…</div></div>}
+            {assistantBusy && (
+              <div className="chat-msg chat-assistant">
+                <div className="chat-bubble chat-thinking">
+                  <span>Thinking</span>
+                  <span className="thinking-dots" aria-hidden>
+                    <span className="thinking-dot" />
+                    <span className="thinking-dot" />
+                    <span className="thinking-dot" />
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

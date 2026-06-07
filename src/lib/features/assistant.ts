@@ -54,7 +54,7 @@ export interface AssistantAction {
   filterTitle?: string;
 }
 
-export type ProposalStatus = "proposed" | "applied" | "cancelled";
+export type ProposalStatus = "proposed" | "applied" | "cancelled" | "undone";
 
 export interface AssistantMessage {
   id: string;

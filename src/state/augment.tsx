@@ -180,7 +180,7 @@ export interface AugmentApi {
   archiveThread: (id: string) => Promise<void>;
   markRead: (id: string) => Promise<void>;
   snooze: (id: string, subject: string, dueAt: number) => Promise<void>;
-  watch: (id: string, subject: string, dueAt: number) => Promise<void>;
+  watch: (id: string, subject: string, dueAt: number, indefinite?: boolean) => Promise<void>;
   cancelSchedule: (item: ScheduleItem) => Promise<void>;
   openInGmail: (id: string) => Promise<void>;
 
@@ -230,6 +230,9 @@ export interface AugmentApi {
   applyProposal: (messageId: string) => Promise<void>;
   cancelProposal: (messageId: string) => void;
   clearAssistantChat: () => void;
+  /** Assistant messages whose applied actions can still be undone this session. */
+  undoableIds: Set<string>;
+  undoMessage: (messageId: string) => Promise<void>;
 
   // In-app composer (new / reply / reply-all / forward; send + save draft).
   compose: ComposeDraft | null;
@@ -338,10 +341,19 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
   const handlingRef = useRef<Set<string>>(new Set());
   // Mirrors read by the long-lived assistant callbacks.
   const selectedIdsRef = useRef<Set<string>>(new Set());
+  // The current mode's thread (mirror) + the full per-mode thread map.
   const assistantMessagesRef = useRef<AssistantMessage[]>([]);
+  const assistantThreadsRef = useRef<Record<AssistantMode, AssistantMessage[]>>({
+    ask: [],
+    request: [],
+    agent: [],
+  });
   const assistantModeRef = useRef<AssistantMode>("request");
   const readerRef = useRef<ReaderState | null>(null);
   const templatesRef = useRef<Template[]>([]);
+  // Per-message inverse functions for undoing applied assistant actions
+  // (session-only — closures can't be persisted, so undo lapses on reload).
+  const undoStoreRef = useRef<Map<string, Array<() => Promise<void>>>>(new Map());
 
   // Start in "restoring" while we attempt to revive a persisted session; the
   // mount effect below resolves it to "ready" or "signedOut".
@@ -375,12 +387,17 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
   const [composeBusy, setComposeBusy] = useState(false);
   const [composeError, setComposeError] = useState<string | null>(null);
   const [canSend, setCanSend] = useState(false);
-  // Conversational assistant: mode + chat log (persisted) + in-flight flag.
+  // Conversational assistant: selected mode + a separate chat thread per mode
+  // (persisted) + in-flight flag. The displayed `assistantMessages` is the
+  // current mode's thread, so switching modes shows a different conversation.
   const [assistantMode, setAssistantModeState] = useState<AssistantMode>(() => loadAssistantChat().mode);
-  const [assistantMessages, setAssistantMessages] = useState<AssistantMessage[]>(
-    () => loadAssistantChat().messages,
+  const [assistantThreads, setAssistantThreads] = useState<Record<AssistantMode, AssistantMessage[]>>(
+    () => loadAssistantChat().threads,
   );
+  const assistantMessages = assistantThreads[assistantMode];
   const [assistantBusy, setAssistantBusy] = useState(false);
+  // Ids of assistant messages whose actions can still be undone this session.
+  const [undoableIds, setUndoableIds] = useState<Set<string>>(() => new Set());
   // User-defined Quick Actions (keyboard-triggered macros), persisted.
   const [quickActions, setQuickActionsState] = useState<QuickAction[]>(() => loadQuickActions());
 
@@ -424,6 +441,7 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
   rowsRef.current = rows;
   selectedIdsRef.current = selectedIds;
   assistantMessagesRef.current = assistantMessages;
+  assistantThreadsRef.current = assistantThreads;
   assistantModeRef.current = assistantMode;
   readerRef.current = reader;
   templatesRef.current = templates;
@@ -799,8 +817,11 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
     setFilterActive(false);
     // Forget the assistant conversation — it's derived from this account's mail.
     setAssistantOpen(false);
-    setAssistantMessages([]);
+    setAssistantThreads({ ask: [], request: [], agent: [] });
     assistantMessagesRef.current = [];
+    assistantThreadsRef.current = { ask: [], request: [], agent: [] };
+    undoStoreRef.current.clear();
+    setUndoableIds(new Set());
     clearAssistantChatStorage();
     searchEngine.clear(); // don't leave indexed mail on disk after sign-out
   }, [client]);
@@ -1364,11 +1385,14 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
   );
 
   const watch = useCallback(
-    async (id: string, subject: string, dueAt: number) => {
+    async (id: string, subject: string, dueAt: number, indefinite = false) => {
       try {
-        await watchThreadFeature(id, subject, dueAt);
+        await watchThreadFeature(id, subject, dueAt, Date.now(), indefinite);
         await refreshSchedule();
-        pushActivity(`Watching “${subject}” for a reply`, "success");
+        pushActivity(
+          indefinite ? `Watching “${subject}” until they reply` : `Watching “${subject}” for a reply`,
+          "success",
+        );
       } catch (err) {
         pushActivity(`Watch failed: ${errorMessage(err)}`, "warn");
       }
@@ -1410,13 +1434,15 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
 
   // ---- Conversational assistant -----------------------------------------
 
-  // setState + persist in one move, always saving with the current mode.
+  // Update the CURRENT mode's thread + persist, in one move.
   const commitMessages = useCallback(
     (updater: (prev: AssistantMessage[]) => AssistantMessage[]) => {
-      setAssistantMessages((prev) => {
-        const next = updater(prev);
-        assistantMessagesRef.current = next;
-        saveAssistantChat({ mode: assistantModeRef.current, messages: next });
+      setAssistantThreads((prev) => {
+        const mode = assistantModeRef.current;
+        const next = { ...prev, [mode]: updater(prev[mode]) };
+        assistantThreadsRef.current = next;
+        assistantMessagesRef.current = next[mode];
+        saveAssistantChat({ mode, threads: next });
         return next;
       });
     },
@@ -1425,14 +1451,23 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
 
   const setAssistantMode = useCallback((mode: AssistantMode) => {
     assistantModeRef.current = mode;
+    assistantMessagesRef.current = assistantThreadsRef.current[mode];
     setAssistantModeState(mode);
-    saveAssistantChat({ mode, messages: assistantMessagesRef.current });
+    saveAssistantChat({ mode, threads: assistantThreadsRef.current });
   }, []);
 
+  // Clear only the current mode's conversation (each mode is its own chat).
   const clearAssistantChat = useCallback(() => {
-    assistantMessagesRef.current = [];
-    setAssistantMessages([]);
-    clearAssistantChatStorage();
+    setAssistantThreads((prev) => {
+      const mode = assistantModeRef.current;
+      const next = { ...prev, [mode]: [] };
+      assistantThreadsRef.current = next;
+      assistantMessagesRef.current = [];
+      saveAssistantChat({ mode, threads: next });
+      return next;
+    });
+    undoStoreRef.current.clear();
+    setUndoableIds(new Set());
   }, []);
 
   // Find or create a tag by name (auto origin) so the assistant can apply it.
@@ -1474,8 +1509,10 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
   );
 
   // Carry out a single assistant action, returning a one-line log of the result.
+  // Run one action and return its log line plus an optional `undo` that reverses
+  // it. Mail-changing actions are reversible; navigation/view actions aren't.
   const runAction = useCallback(
-    async (action: AssistantAction): Promise<string> => {
+    async (action: AssistantAction): Promise<{ log: string; undo?: () => Promise<void> }> => {
       // Target: explicit ids → current selection → the open email ("this mail").
       const ids =
         action.ids && action.ids.length > 0
@@ -1489,27 +1526,56 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
       switch (action.type) {
         case "createLabel":
         case "applyLabel": {
-          if (!action.label) return "";
+          if (!action.label) return { log: "" };
+          const wasNew = !tagsRef.current.some(
+            (t) => t.name.toLowerCase() === action.label!.toLowerCase(),
+          );
           const tag = await ensureTag(action.label);
           if (ids.length > 0) await addTagToThreads(ids, tag);
-          return `Applied “${tag.name}” to ${count(ids.length)}`;
+          const undo = async () => {
+            if (ids.length > 0) {
+              await Promise.allSettled(
+                ids.map((id) => client.modifyThread(id, { removeLabelIds: [tag.labelId] })),
+              );
+              setRows((prev) =>
+                prev.map((r) =>
+                  ids.includes(r.id)
+                    ? { ...r, labelIds: r.labelIds.filter((l) => l !== tag.labelId) }
+                    : r,
+                ),
+              );
+            }
+            // If this action created the label, remove it from the sidebar too.
+            if (wasNew) persistTags(tagsRef.current.filter((t) => t.id !== tag.id));
+          };
+          return { log: `Applied “${tag.name}” to ${count(ids.length)}`, undo };
         }
         case "removeLabel": {
-          if (!action.label) return "";
+          if (!action.label) return { log: "" };
           const tag = tagsRef.current.find((t) => t.name.toLowerCase() === action.label!.toLowerCase());
-          if (!tag) return `No label “${action.label}” to remove`;
+          if (!tag) return { log: `No label “${action.label}” to remove` };
           for (const id of ids) await setThreadTag(id, tag, false);
-          return `Removed “${tag.name}” from ${count(ids.length)}`;
+          const undo = async () => {
+            for (const id of ids) await setThreadTag(id, tag, true);
+          };
+          return { log: `Removed “${tag.name}” from ${count(ids.length)}`, undo };
         }
         case "archive": {
           await Promise.allSettled(
             ids.map((id) => client.archiveThread(id).then(() => removeRow(id))),
           );
-          return `Archived ${count(ids.length)}`;
+          const undo = async () => {
+            await Promise.allSettled(ids.map((id) => client.unarchiveThread(id)));
+          };
+          return { log: `Archived ${count(ids.length)}`, undo };
         }
         case "markRead": {
           await Promise.allSettled(ids.map((id) => markRead(id)));
-          return `Marked ${count(ids.length)} read`;
+          const undo = async () => {
+            await Promise.allSettled(ids.map((id) => client.modifyThread(id, { addLabelIds: ["UNREAD"] })));
+            setRows((prev) => prev.map((r) => (ids.includes(r.id) ? { ...r, unread: true } : r)));
+          };
+          return { log: `Marked ${count(ids.length)} read`, undo };
         }
         case "snooze": {
           const preset =
@@ -1521,24 +1587,32 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
             const row = rowsRef.current.find((r) => r.id === id);
             await snooze(id, row?.subject ?? "(no subject)", dueAt);
           }
-          return `Snoozed ${count(ids.length)} (${preset.label})`;
+          return { log: `Snoozed ${count(ids.length)} (${preset.label})` };
         }
         case "moveToFolder": {
-          if (!action.folder) return "";
+          if (!action.folder) return { log: "" };
           const folder = await ensureFolder(action.folder);
           await moveThreadsToFolder(ids, folder);
-          return `Moved ${count(ids.length)} to “${folder.name}”`;
+          const folderLabelId = await client.ensureLabelId(folder.name);
+          const undo = async () => {
+            await Promise.allSettled(
+              ids.map((id) =>
+                client.modifyThread(id, { addLabelIds: ["INBOX"], removeLabelIds: [folderLabelId] }),
+              ),
+            );
+          };
+          return { log: `Moved ${count(ids.length)} to “${folder.name}”`, undo };
         }
         case "openThread": {
           const id = action.ids?.[0] ?? [...selectedIdsRef.current][0];
-          if (!id) return "No email to open";
+          if (!id) return { log: "No email to open" };
           await openThread(id);
           const row = rowsRef.current.find((r) => r.id === id);
-          return row ? `Opened “${row.subject || "(no subject)"}”` : "Opened the email";
+          return { log: row ? `Opened “${row.subject || "(no subject)"}”` : "Opened the email" };
         }
         case "setSort": {
           setSort(action.sortKey ?? "date", action.sortDir);
-          return `Sorted by ${action.sortKey ?? "date"}`;
+          return { log: `Sorted by ${action.sortKey ?? "date"}` };
         }
         case "setFilter": {
           const parts: string[] = [];
@@ -1552,11 +1626,11 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
           const query = parts.join(" ").trim() || "in:inbox";
           const title = action.filterTitle ?? action.label ?? action.from ?? "Filtered";
           applyListQuery(query, title);
-          return `Filtered: ${title}`;
+          return { log: `Filtered: ${title}` };
         }
         case "answer":
         default:
-          return "";
+          return { log: "" };
       }
     },
     [
@@ -1572,22 +1646,35 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
       openThread,
       setSort,
       applyListQuery,
+      persistTags,
     ],
   );
 
+  // Run a batch of actions, returning the inverse functions (in run order) so the
+  // turn can be undone.
   const executeActions = useCallback(
-    async (actions: AssistantAction[]): Promise<void> => {
+    async (actions: AssistantAction[]): Promise<Array<() => Promise<void>>> => {
+      const undos: Array<() => Promise<void>> = [];
       for (const action of actions) {
         try {
-          const log = await runAction(action);
+          const { log, undo } = await runAction(action);
           if (log) pushActivity(log, "success");
+          if (undo) undos.push(undo);
         } catch (err) {
           pushActivity(`Assistant action failed: ${errorMessage(err)}`, "warn");
         }
       }
+      return undos;
     },
     [runAction, pushActivity],
   );
+
+  // Remember a message's inverse functions so its "Undo" button can reverse it.
+  const registerUndos = useCallback((messageId: string, undos: Array<() => Promise<void>>) => {
+    if (undos.length === 0) return;
+    undoStoreRef.current.set(messageId, undos);
+    setUndoableIds((prev) => new Set(prev).add(messageId));
+  }, []);
 
   // Model-facing snapshot of the mail in view. A compact list (id + sender +
   // subject + snippet + triage summary) for everything loaded, PLUS the full body
@@ -1714,10 +1801,12 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
         const reply =
           output.reply?.trim() || (pending.length || nav.length ? "Done." : "…");
         if (mode === "agent" && pending.length > 0) {
-          await executeActions(pending);
+          const undos = await executeActions(pending);
+          const msgId = crypto.randomUUID();
+          registerUndos(msgId, undos);
           commitMessages((prev) => [
             ...prev,
-            { id: crypto.randomUUID(), role: "assistant", content: reply, ts: Date.now(), actions: pending, status: "applied" },
+            { id: msgId, role: "assistant", content: reply, ts: Date.now(), actions: pending, status: "applied" },
           ]);
         } else {
           commitMessages((prev) => [
@@ -1746,19 +1835,20 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
         setAssistantBusy(false);
       }
     },
-    [assistantBusy, buildAssistantContext, commitMessages, executeActions],
+    [assistantBusy, buildAssistantContext, commitMessages, executeActions, registerUndos],
   );
 
   const applyProposal = useCallback(
     async (messageId: string): Promise<void> => {
       const msg = assistantMessagesRef.current.find((m) => m.id === messageId);
       if (!msg?.actions || msg.status !== "proposed") return;
-      await executeActions(msg.actions);
+      const undos = await executeActions(msg.actions);
+      registerUndos(messageId, undos);
       commitMessages((prev) =>
         prev.map((m) => (m.id === messageId ? { ...m, status: "applied" } : m)),
       );
     },
-    [executeActions, commitMessages],
+    [executeActions, registerUndos, commitMessages],
   );
 
   const cancelProposal = useCallback(
@@ -1768,6 +1858,31 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
       );
     },
     [commitMessages],
+  );
+
+  // Reverse an applied turn's actions (in reverse run order), then mark it undone.
+  const undoMessage = useCallback(
+    async (messageId: string): Promise<void> => {
+      const undos = undoStoreRef.current.get(messageId);
+      if (!undos || undos.length === 0) return;
+      for (const undo of [...undos].reverse()) {
+        try {
+          await undo();
+        } catch {
+          /* best-effort: keep undoing the rest */
+        }
+      }
+      undoStoreRef.current.delete(messageId);
+      setUndoableIds((prev) => {
+        const next = new Set(prev);
+        next.delete(messageId);
+        return next;
+      });
+      commitMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, status: "undone" } : m)));
+      pushActivity("Undid assistant action", "info");
+      await refreshInbox();
+    },
+    [commitMessages, pushActivity, refreshInbox],
   );
 
   // ---- Composer ----------------------------------------------------------
@@ -2176,6 +2291,8 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
       applyProposal,
       cancelProposal,
       clearAssistantChat,
+      undoableIds,
+      undoMessage,
       compose,
       composeBusy,
       composeError,
@@ -2274,6 +2391,8 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
       applyProposal,
       cancelProposal,
       clearAssistantChat,
+      undoableIds,
+      undoMessage,
       compose,
       composeBusy,
       composeError,

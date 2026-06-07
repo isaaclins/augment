@@ -40,6 +40,9 @@ pub struct ScheduleItem {
     /// For "watch": the moment watching began; a reply after this counts.
     #[serde(default)]
     pub watch_since: Option<i64>,
+    /// For "watch": keep re-checking until a reply arrives (no deadline).
+    #[serde(default)]
+    pub indefinite: Option<bool>,
 }
 
 /// Payload sent from the frontend to create an item (id/createdAt assigned here).
@@ -52,6 +55,8 @@ pub struct NewScheduleItem {
     pub due_at: i64,
     #[serde(default)]
     pub watch_since: Option<i64>,
+    #[serde(default)]
+    pub indefinite: Option<bool>,
 }
 
 pub fn now_ms() -> i64 {
@@ -116,6 +121,7 @@ pub fn schedule_add(state: State<'_, AppState>, item: NewScheduleItem) -> AppRes
         due_at: item.due_at,
         created_at: now_ms(),
         watch_since: item.watch_since,
+        indefinite: item.indefinite,
     };
     let mut items = state.schedule.lock().map_err(|_| AppError::Internal("schedule lock poisoned".into()))?;
     items.push(stored.clone());
@@ -193,6 +199,7 @@ mod tests {
             due_at,
             created_at: 0,
             watch_since: None,
+            indefinite: None,
         }
     }
 

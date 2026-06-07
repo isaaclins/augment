@@ -8,6 +8,7 @@ import { ThreadReader } from "./ThreadReader";
 import { ContextMenu, type MenuNode } from "./ContextMenu";
 import { TagChip, TagGlyph } from "./tags";
 import { CategoryChip, PriorityPill } from "./triage";
+import { Avatar } from "./Avatar";
 import { useClickOutside } from "./hooks";
 import { SORT_OPTIONS, type SortKey } from "../lib/features/view";
 import {
@@ -211,7 +212,7 @@ export function InboxView() {
         items: WATCH_PRESETS.map((preset) => ({
           kind: "item",
           label: preset.label,
-          onSelect: () => void watch(row.id, row.subject, dueAtFromPreset(preset)),
+          onSelect: () => void watch(row.id, row.subject, dueAtFromPreset(preset), preset.indefinite),
         })),
       },
       {
@@ -402,31 +403,36 @@ export function InboxView() {
                 }}
                 onContextMenu={(event) => onRowContextMenu(event, row)}
               >
-                <div className="row-top">
-                  <span className="row-from">{addressLabel(row.from)}</span>
-                  <span className="row-date">{formatListDate(row.date)}</span>
-                </div>
-                <div className="row-subject">
-                  {row.unread && <span className="row-dot" aria-label="unread" />}
-                  {row.subject}
-                  {row.messageCount > 1 && <span className="row-count">{row.messageCount}</span>}
-                </div>
-                <div className="row-snippet">{row.snippet}</div>
-                {rowTriage?.summary && (
-                  <div className="row-summary">
-                    <SparkleIcon size={12} />
-                    <span>{rowTriage.summary}</span>
+                <span className="row-avatar">
+                  <Avatar from={row.from} size={32} />
+                </span>
+                <div className="row-body">
+                  <div className="row-top">
+                    <span className="row-from">{addressLabel(row.from)}</span>
+                    <span className="row-date">{formatListDate(row.date)}</span>
                   </div>
-                )}
-                {(rowTriage || rowTags.length > 0) && (
-                  <div className="row-tags">
-                    {showCat && catName && <CategoryChip name={catName} tag={catTag} />}
-                    {rowTriage && <PriorityPill priority={rowTriage.priority} />}
-                    {rowTags.map((tag) => (
-                      <TagChip key={tag.id} tag={tag} />
-                    ))}
+                  <div className="row-subject">
+                    {row.unread && <span className="row-dot" aria-label="unread" />}
+                    {row.subject}
+                    {row.messageCount > 1 && <span className="row-count">{row.messageCount}</span>}
                   </div>
-                )}
+                  <div className="row-snippet">{row.snippet}</div>
+                  {rowTriage?.summary && (
+                    <div className="row-summary">
+                      <SparkleIcon size={12} />
+                      <span>{rowTriage.summary}</span>
+                    </div>
+                  )}
+                  {(rowTriage || rowTags.length > 0) && (
+                    <div className="row-tags">
+                      {showCat && catName && <CategoryChip name={catName} tag={catTag} />}
+                      {rowTriage && <PriorityPill priority={rowTriage.priority} />}
+                      {rowTags.map((tag) => (
+                        <TagChip key={tag.id} tag={tag} />
+                      ))}
+                    </div>
+                  )}
+                </div>
               </button>
             );
           })}

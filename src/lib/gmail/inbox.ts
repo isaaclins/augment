@@ -2,7 +2,7 @@
 // and that fetch the representative message per thread for the rules engine.
 
 import type { GmailClient } from "./client";
-import { parseMessage, type EmailAddress, type ParsedMessage } from "./parse";
+import { decodeEntities, parseMessage, type EmailAddress, type ParsedMessage } from "./parse";
 import { SystemLabel } from "./types";
 
 export interface ThreadRow {
@@ -29,9 +29,9 @@ function rowFromMessages(id: string, snippet: string, messages: ParsedMessage[])
   const labelIds = Array.from(new Set(messages.flatMap((m) => m.labelIds)));
   return {
     id,
-    snippet,
+    snippet: decodeEntities(snippet),
     from: latest?.from ?? { email: "" },
-    subject: latest?.subject ?? "(no subject)",
+    subject: decodeEntities(latest?.subject ?? "(no subject)"),
     date: latest?.internalDate ?? 0,
     unread,
     messageCount: messages.length,

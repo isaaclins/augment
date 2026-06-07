@@ -15,6 +15,7 @@ export interface ScheduleItem {
   dueAt: number; // epoch ms
   createdAt: number; // epoch ms
   watchSince?: number; // epoch ms (watch only)
+  indefinite?: boolean; // watch only: keep re-checking until a reply arrives
 }
 
 export interface NewScheduleItem {
@@ -23,6 +24,7 @@ export interface NewScheduleItem {
   subject: string;
   dueAt: number;
   watchSince?: number;
+  indefinite?: boolean;
 }
 
 export const SCHEDULE_DUE_EVENT = "schedule-due";
