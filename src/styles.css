@@ -364,9 +364,11 @@ h3 {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 14px;
-  color: var(--text-secondary);
-  font-size: 13px;
+  gap: 16px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
 }
 
 .signin {
@@ -375,7 +377,12 @@ h3 {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: radial-gradient(120% 120% at 50% 0%, var(--accent-soft), var(--bg) 55%);
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(120% 120% at 50% -10%, var(--accent-soft), transparent 55%),
+    linear-gradient(to right, var(--grid-color) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid-color) 1px, transparent 1px);
+  background-size: 100% 100%, var(--grid-size) var(--grid-size), var(--grid-size) var(--grid-size);
 }
 
 .signin-card {
@@ -383,9 +390,9 @@ h3 {
   max-width: calc(100vw - 48px);
   background: var(--bg-elevated);
   border: 1px solid var(--border);
-  border-radius: 16px;
-  box-shadow: var(--shadow-md);
-  padding: 30px 30px 24px;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  padding: 28px 28px 22px;
 }
 
 .signin-brand {
@@ -396,26 +403,29 @@ h3 {
 }
 
 .signin-logo {
-  width: 46px;
-  height: 46px;
-  border-radius: 12px;
-  background: linear-gradient(160deg, var(--accent), #6a4dff);
-  color: #fff;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 700;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: var(--shadow-sm);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
 .signin-brand h1 {
-  font-size: 21px;
-  letter-spacing: -0.02em;
+  font-size: 19px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 
 .signin-tag {
-  margin: 2px 0 0;
+  margin: 3px 0 0;
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .signin-features {
@@ -439,13 +449,14 @@ h3 {
 
 .signin-features strong {
   display: block;
-  font-size: 13.5px;
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .signin-features em {
   font-style: normal;
   color: var(--text-secondary);
-  font-size: 12.5px;
+  font-size: 12px;
 }
 
 .signin-hint {
@@ -462,10 +473,11 @@ h3 {
   border: none;
   background: transparent;
   color: var(--text-secondary);
-  font-size: 12.5px;
-  font-weight: 550;
-  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: var(--radius-pill);
   cursor: pointer;
+  transition: background var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out);
 }
 
 .signin-cancel:hover {
@@ -476,24 +488,25 @@ h3 {
 .signin-error {
   margin: 12px 0 0;
   padding: 10px 12px;
-  border-radius: var(--radius-sm);
-  background: rgba(224, 83, 61, 0.1);
+  border-radius: var(--radius);
+  background: var(--danger-soft);
+  border: 1px solid color-mix(in srgb, var(--danger) 22%, transparent);
   color: var(--danger);
-  font-size: 12.5px;
+  font-size: 12px;
 }
 
 .signin-foot {
   margin: 18px 0 0;
   color: var(--text-tertiary);
-  font-size: 11.5px;
-  line-height: 1.5;
+  font-size: 11px;
+  line-height: 1.55;
 }
 
 .signin-foot code {
-  font-family: "SF Mono", ui-monospace, monospace;
+  font-family: var(--font-mono);
   background: var(--bg-hover);
   padding: 1px 5px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   font-size: 11px;
 }
 
@@ -524,20 +537,23 @@ h3 {
   align-items: center;
   gap: 9px;
   padding: 8px 8px 12px;
-  font-weight: 650;
-  font-size: 14.5px;
-  letter-spacing: -0.01em;
+  font-weight: 700;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
 
 .sidebar-logo {
   width: 26px;
   height: 26px;
-  border-radius: 7px;
-  background: linear-gradient(160deg, var(--accent), #6a4dff);
-  color: #fff;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 700;
   display: flex;
   align-items: center;
   justify-content: center;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
 .sidebar-nav {
@@ -567,8 +583,9 @@ h3 {
 }
 
 .nav-item-active {
-  background: var(--bg-active);
+  background: var(--accent-soft);
   color: var(--accent);
+  box-shadow: inset 2px 0 0 var(--accent);
 }
 
 .nav-icon {
@@ -1165,7 +1182,7 @@ h3 {
   flex: 1;
   width: 100%;
   border: none;
-  background: #fff;
+  background: var(--bg-elevated);
 }
 
 /* ------------------------------------------------------------- Panels */
@@ -1755,7 +1772,7 @@ h3 {
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background: #fff;
+  background: var(--accent-ink);
   box-shadow: var(--shadow-sm);
   transition: transform 0.15s;
 }
@@ -1919,12 +1936,14 @@ h3 {
 .palette-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 300;
+  z-index: var(--z-modal);
   display: flex;
   justify-content: center;
   align-items: flex-start;
   padding-top: 12vh;
-  background: rgba(10, 12, 18, 0.34);
+  background: color-mix(in srgb, var(--text) 34%, transparent);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
 }
 
 .palette {
@@ -1935,7 +1954,7 @@ h3 {
   flex-direction: column;
   background: var(--bg-elevated);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md);
   overflow: hidden;
 }
@@ -1992,7 +2011,8 @@ h3 {
 }
 
 .palette-row-active {
-  background: var(--bg-active);
+  background: var(--accent-soft);
+  box-shadow: inset 2px 0 0 var(--accent);
 }
 
 .palette-row-top {
@@ -2342,12 +2362,14 @@ h3 {
   align-items: center;
   gap: 4px;
   max-width: 160px;
-  padding: 1px 8px 1px 6px;
+  padding: 1px 9px 1px 7px;
   border: 1px solid;
-  border-radius: 999px;
-  font-size: 10.5px;
+  border-radius: var(--radius-pill);
+  font-size: 10px;
   font-weight: 600;
-  line-height: 1.5;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  line-height: 1.55;
   white-space: nowrap;
 }
 
@@ -2365,8 +2387,10 @@ h3 {
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 300;
-  background: rgba(15, 18, 30, 0.45);
+  z-index: var(--z-modal);
+  background: color-mix(in srgb, var(--text) 40%, transparent);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2378,7 +2402,7 @@ h3 {
   max-width: 100%;
   background: var(--bg-elevated);
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md);
   display: flex;
   flex-direction: column;
@@ -2501,11 +2525,11 @@ h3 {
 .btn-danger {
   color: var(--danger);
   border-color: transparent;
-  background: rgba(224, 83, 61, 0.12);
+  background: var(--danger-soft);
 }
 
 .btn-danger:hover {
-  background: rgba(224, 83, 61, 0.2);
+  background: color-mix(in srgb, var(--danger) 22%, transparent);
 }
 
 /* ----------------------------------------------- Settings window (its own webview) */
@@ -2666,7 +2690,7 @@ h3 {
   padding: 0 4px;
   border-radius: 999px;
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-ink);
   font-size: 9px;
   font-weight: 700;
   line-height: 14px;
@@ -2789,7 +2813,7 @@ h3 {
   font-size: 12px;
   background: var(--accent);
   border-color: transparent;
-  color: #fff;
+  color: var(--accent-ink);
   box-shadow: none;
 }
 
@@ -2832,7 +2856,7 @@ h3 {
 .assistant-mode.is-active {
   background: var(--accent);
   border-color: transparent;
-  color: #fff;
+  color: var(--accent-ink);
 }
 
 .assistant-suggestions {
@@ -2885,7 +2909,7 @@ h3 {
 
 .chat-user .chat-bubble {
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-ink);
   border-bottom-right-radius: 4px;
 }
 
@@ -3698,5 +3722,39 @@ h3 {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+}
+
+/* ====================================================== Surface entry motion
+   Pure-CSS mount animations (play when the element appears). The global
+   prefers-reduced-motion block neutralizes these for users who opt out. */
+
+.assistant-panel {
+  animation: drawer-in var(--t-base) var(--ease-spring) both;
+}
+
+.palette,
+.modal {
+  animation: pop-in var(--t-fast) var(--ease-out) both;
+}
+
+.menu-pop,
+.ctx-menu,
+.ctx-submenu {
+  animation: pop-in var(--t-fast) var(--ease-out) both;
+  transform-origin: top;
+}
+
+@keyframes drawer-in {
+  from {
+    transform: translateX(14px);
+    opacity: 0;
+  }
+}
+
+@keyframes pop-in {
+  from {
+    transform: scale(0.97) translateY(-2px);
+    opacity: 0;
   }
 }
