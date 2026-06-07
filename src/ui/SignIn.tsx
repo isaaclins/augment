@@ -1,12 +1,5 @@
 import { useAugment } from "../state/augment";
-import { ClockIcon, EyeIcon, MailIcon, ShieldIcon, SlidersIcon } from "./icons";
-
-const FEATURES = [
-  { icon: <SlidersIcon size={18} />, title: "Rules", body: "Auto-label and archive with conditions you define." },
-  { icon: <ClockIcon size={18} />, title: "Snooze", body: "Hide a thread until later — it resurfaces with a nudge." },
-  { icon: <EyeIcon size={18} />, title: "Watch for reply", body: "Get pinged if a thread goes quiet past your deadline." },
-  { icon: <ShieldIcon size={18} />, title: "Private rendering", body: "Mail renders with zero remote content. Ever." },
-];
+import { MailIcon } from "./icons";
 
 export function SignIn() {
   const { status, error, signIn, cancelSignIn } = useAugment();
@@ -25,17 +18,9 @@ export function SignIn() {
           </div>
         </div>
 
-        <ul className="signin-features">
-          {FEATURES.map((feature) => (
-            <li key={feature.title}>
-              <span className="signin-feature-icon">{feature.icon}</span>
-              <span>
-                <strong>{feature.title}</strong>
-                <em>{feature.body}</em>
-              </span>
-            </li>
-          ))}
-        </ul>
+        <p className="signin-line">
+          Rules, snooze, watch-for-reply, and zero-remote rendering on top of your inbox.
+        </p>
 
         <button className="btn btn-primary btn-lg" onClick={() => void signIn()} disabled={authenticating} type="button">
           {authenticating ? "Waiting for Google…" : "Sign in with Google"}

@@ -3987,3 +3987,12 @@ h3 {
 .setup-body .panel-head h2 {
   display: none;
 }
+
+/* Sign-in one-liner (replaced the 4-row feature list — UI-AUDIT). */
+.signin-line {
+  margin: 0 0 22px;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 1.6;
+  text-wrap: pretty;
+}
