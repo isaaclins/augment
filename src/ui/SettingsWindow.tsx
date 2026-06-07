@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { loadSettings, saveSettings, type Settings } from "../lib/store";
 import { broadcastSettings, onSettingsBroadcast } from "../lib/settingsSync";
+import { applyTheme } from "../lib/theme";
 import { SettingsView } from "./SettingsView";
 
 function useWindowSettings() {
@@ -36,6 +37,7 @@ function useWindowSettings() {
     ref.current = next;
     setSettings(next);
     saveSettings(next);
+    applyTheme(next);
     broadcastSettings(next);
   }, []);
 

@@ -1,51 +1,306 @@
 /* Augment — a clean, native-feeling macOS UI. Light by default with a full
    dark-mode pass via prefers-color-scheme. */
 
+/* ===================================================================
+   WARM TECHNICAL / COZY TERMINAL design system.
+   Structural tokens (type, radius, motion, z) live in :root and never
+   change. Color tokens are grouped by [data-theme] + [data-mode] so the
+   palette is user-switchable from Settings. applyTheme() in lib/theme.ts
+   resolves "system" mode to an explicit data-mode of light|dark.
+   =================================================================== */
+
 :root {
-  --bg: #ffffff;
-  --bg-sidebar: #f3f4f7;
-  --bg-elevated: #ffffff;
-  --bg-hover: #eef0f4;
-  --bg-active: #e7ebf6;
-  --border: #e4e6ec;
-  --border-strong: #d3d7e0;
-  --text: #1b1e27;
-  --text-secondary: #61687a;
-  --text-tertiary: #8b91a1;
-  --accent: #2f6bff;
-  --accent-hover: #2a60e6;
-  --accent-soft: #e9f0ff;
-  --danger: #e0533d;
-  --success: #1f9d57;
-  --warn: #c9851a;
-  --shadow-sm: 0 1px 2px rgba(20, 24, 40, 0.06), 0 1px 3px rgba(20, 24, 40, 0.04);
-  --shadow-md: 0 6px 20px rgba(20, 24, 40, 0.12);
-  --radius: 9px;
-  --radius-sm: 6px;
+  /* Type — IBM Plex Mono everywhere in the chrome (left-side font). */
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Monaco, Consolas, monospace;
+  --font-ui: var(--font-mono);
+  --fs-body: 13px;
+
+  /* Shape — one documented system: pills for actions, soft corners for surfaces. */
+  --radius-sm: 4px;
+  --radius: 8px;
+  --radius-lg: 12px;
+  --radius-pill: 9999px;
+
+  /* Texture + chrome */
+  --grid-size: 40px;
   --titlebar-h: 28px;
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.32, 0.72, 0, 1);
+  --t-fast: 150ms;
+  --t-base: 240ms;
+  --t-slow: 480ms;
+
+  /* Z-index scale (no arbitrary values elsewhere) */
+  --z-sticky: 20;
+  --z-titlebar: 50;
+  --z-overlay: 100;
+  --z-modal: 200;
+  --z-toast: 300;
+
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
+
+  /* ---- Default color theme: CAFE, LIGHT (also pre-JS fallback) ---- */
+  --bg: #f9f7f5;
+  --bg-sidebar: #f1ece5;
+  --bg-elevated: #fcfbf9;
+  --bg-hover: #efe8e0;
+  --bg-active: #e9e3dd;
+  --border: #e6ddd2;
+  --border-strong: #d8ccbc;
+  --text: #3e2b1e;
+  --text-secondary: #6f5c4c;
+  --text-tertiary: #9c8b7a;
+  --accent: #5d4432;
+  --accent-hover: #4a3527;
+  --accent-soft: #ede3d9;
+  --accent-ink: #fbf7f2;
+  --pop: #ff5500;
+  --success: #16a34a;
+  --success-soft: #e3f1e6;
+  --warning: #d97706;
+  --warn: #d97706;
+  --warning-soft: #faeedc;
+  --danger: #dc2626;
+  --danger-soft: #fbe3e1;
+  --grid-color: rgba(93, 68, 50, 0.045);
+  --shadow-sm: 0 1px 2px rgba(62, 43, 30, 0.06), 0 1px 3px rgba(62, 43, 30, 0.05);
+  --shadow-md: 0 8px 24px rgba(62, 43, 30, 0.1);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #16181d;
-    --bg-sidebar: #1b1e25;
-    --bg-elevated: #20242c;
-    --bg-hover: #262b34;
-    --bg-active: #2b3450;
-    --border: #2a2f39;
-    --border-strong: #353c49;
-    --text: #e9ebf1;
-    --text-secondary: #a3abbb;
-    --text-tertiary: #767e8f;
-    --accent: #4d83ff;
-    --accent-hover: #6a98ff;
-    --accent-soft: #1f2a44;
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-    --shadow-md: 0 10px 28px rgba(0, 0, 0, 0.45);
-  }
+/* ---- CAFE, DARK (cozy terminal at night) ---- */
+:root[data-theme="cafe"][data-mode="dark"] {
+  --bg: #1a140f;
+  --bg-sidebar: #211a13;
+  --bg-elevated: #261d16;
+  --bg-hover: #2d241b;
+  --bg-active: #352a1f;
+  --border: #3a2d22;
+  --border-strong: #4b3a2c;
+  --text: #f0e7dd;
+  --text-secondary: #bba88f;
+  --text-tertiary: #8a7868;
+  --accent: #cba17a;
+  --accent-hover: #dab28a;
+  --accent-soft: #2e2418;
+  --accent-ink: #1a140f;
+  --pop: #ff6a1f;
+  --success: #34d27b;
+  --success-soft: #16271c;
+  --warning: #e8a24a;
+  --warn: #e8a24a;
+  --warning-soft: #2a2113;
+  --danger: #f26b5e;
+  --danger-soft: #2c1715;
+  --grid-color: rgba(203, 161, 122, 0.05);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+/* ---- FOREST, LIGHT (bone + deep green) ---- */
+:root[data-theme="forest"][data-mode="light"] {
+  --bg: #f4f6f1;
+  --bg-sidebar: #eaefe4;
+  --bg-elevated: #fafbf7;
+  --bg-hover: #e6ece0;
+  --bg-active: #dce6d4;
+  --border: #dde5d2;
+  --border-strong: #c7d3b8;
+  --text: #22301f;
+  --text-secondary: #4f6147;
+  --text-tertiary: #82917a;
+  --accent: #2f5d3a;
+  --accent-hover: #244a2e;
+  --accent-soft: #dee9d8;
+  --accent-ink: #f6faf4;
+  --pop: #e2792b;
+  --success: #16a34a;
+  --success-soft: #e0efe2;
+  --warning: #b7791f;
+  --warn: #b7791f;
+  --warning-soft: #f3ecd6;
+  --danger: #c0392b;
+  --danger-soft: #f5e2df;
+  --grid-color: rgba(47, 93, 58, 0.05);
+  --shadow-sm: 0 1px 2px rgba(34, 48, 31, 0.06), 0 1px 3px rgba(34, 48, 31, 0.05);
+  --shadow-md: 0 8px 24px rgba(34, 48, 31, 0.1);
+}
+
+/* ---- FOREST, DARK ---- */
+:root[data-theme="forest"][data-mode="dark"] {
+  --bg: #0f140f;
+  --bg-sidebar: #151c15;
+  --bg-elevated: #1a221a;
+  --bg-hover: #202a20;
+  --bg-active: #283328;
+  --border: #2a352a;
+  --border-strong: #3a4a3a;
+  --text: #e6eee2;
+  --text-secondary: #a2b59c;
+  --text-tertiary: #7a8b74;
+  --accent: #7fb97e;
+  --accent-hover: #92c891;
+  --accent-soft: #1e2a1e;
+  --accent-ink: #0f140f;
+  --pop: #e2792b;
+  --success: #4cd27b;
+  --success-soft: #14241a;
+  --warning: #e0a33c;
+  --warn: #e0a33c;
+  --warning-soft: #261f12;
+  --danger: #f26b5e;
+  --danger-soft: #2a1513;
+  --grid-color: rgba(127, 185, 126, 0.05);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+/* ---- GRAPHITE, LIGHT (warm-neutral + slate ink) ---- */
+:root[data-theme="graphite"][data-mode="light"] {
+  --bg: #f3f2f0;
+  --bg-sidebar: #e9e8e5;
+  --bg-elevated: #fbfbfa;
+  --bg-hover: #e6e5e2;
+  --bg-active: #deddd9;
+  --border: #e0dfdc;
+  --border-strong: #cbc9c4;
+  --text: #23262b;
+  --text-secondary: #565a61;
+  --text-tertiary: #8a8e94;
+  --accent: #3a4654;
+  --accent-hover: #2c3744;
+  --accent-soft: #e2e4e8;
+  --accent-ink: #f7f8fa;
+  --pop: #c2410c;
+  --success: #16a34a;
+  --success-soft: #e2efe6;
+  --warning: #b45309;
+  --warn: #b45309;
+  --warning-soft: #f1e9d9;
+  --danger: #be3a2f;
+  --danger-soft: #f4e2e0;
+  --grid-color: rgba(35, 38, 43, 0.05);
+  --shadow-sm: 0 1px 2px rgba(20, 22, 26, 0.06), 0 1px 3px rgba(20, 22, 26, 0.05);
+  --shadow-md: 0 8px 24px rgba(20, 22, 26, 0.12);
+}
+
+/* ---- GRAPHITE, DARK ---- */
+:root[data-theme="graphite"][data-mode="dark"] {
+  --bg: #16181c;
+  --bg-sidebar: #1c1f24;
+  --bg-elevated: #21252b;
+  --bg-hover: #272c33;
+  --bg-active: #30363f;
+  --border: #2c313a;
+  --border-strong: #3c4350;
+  --text: #e8eaee;
+  --text-secondary: #a6acb7;
+  --text-tertiary: #7c828d;
+  --accent: #8fa1b8;
+  --accent-hover: #a2b2c6;
+  --accent-soft: #222730;
+  --accent-ink: #16181c;
+  --pop: #f0792b;
+  --success: #34d27b;
+  --success-soft: #15241b;
+  --warning: #e0a33c;
+  --warn: #e0a33c;
+  --warning-soft: #271f13;
+  --danger: #f26b5e;
+  --danger-soft: #2a1614;
+  --grid-color: rgba(143, 161, 184, 0.05);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+/* ---- PAPER, LIGHT (high-contrast paper + Expressive orange) ---- */
+:root[data-theme="paper"][data-mode="light"] {
+  --bg: #fbfaf7;
+  --bg-sidebar: #f2f0ea;
+  --bg-elevated: #fefefc;
+  --bg-hover: #efede6;
+  --bg-active: #e8e5dc;
+  --border: #e4e1d8;
+  --border-strong: #cfcabd;
+  --text: #1a1a1a;
+  --text-secondary: #55524c;
+  --text-tertiary: #8a867e;
+  --accent: #ff5500;
+  --accent-hover: #e64d00;
+  --accent-soft: #ffe8dc;
+  --accent-ink: #fff9f5;
+  --pop: #1a1a1a;
+  --success: #16a34a;
+  --success-soft: #e2efe6;
+  --warning: #c2410c;
+  --warn: #c2410c;
+  --warning-soft: #f6e6d8;
+  --danger: #dc2626;
+  --danger-soft: #fbe3e1;
+  --grid-color: rgba(26, 26, 26, 0.05);
+  --shadow-sm: 0 1px 2px rgba(26, 26, 26, 0.06), 0 1px 3px rgba(26, 26, 26, 0.05);
+  --shadow-md: 0 8px 24px rgba(26, 26, 26, 0.1);
+}
+
+/* ---- PAPER, DARK ---- */
+:root[data-theme="paper"][data-mode="dark"] {
+  --bg: #141210;
+  --bg-sidebar: #1a1714;
+  --bg-elevated: #1f1b17;
+  --bg-hover: #26211c;
+  --bg-active: #2f2922;
+  --border: #332d26;
+  --border-strong: #463e34;
+  --text: #f2eee7;
+  --text-secondary: #b5aea3;
+  --text-tertiary: #857e73;
+  --accent: #ff6a1f;
+  --accent-hover: #ff8142;
+  --accent-soft: #2a1d12;
+  --accent-ink: #141210;
+  --pop: #f2eee7;
+  --success: #34d27b;
+  --success-soft: #15241b;
+  --warning: #e0a33c;
+  --warn: #e0a33c;
+  --warning-soft: #271f13;
+  --danger: #f26b5e;
+  --danger-soft: #2c1715;
+  --grid-color: rgba(255, 106, 31, 0.05);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+/* ---- TERMINAL (dark amber phosphor; same in both modes by design) ---- */
+:root[data-theme="terminal"] {
+  --bg: #13110e;
+  --bg-sidebar: #191712;
+  --bg-elevated: #1e1b15;
+  --bg-hover: #26221a;
+  --bg-active: #2f2a20;
+  --border: #322c22;
+  --border-strong: #473f30;
+  --text: #ece4d6;
+  --text-secondary: #b7ac97;
+  --text-tertiary: #867c68;
+  --accent: #e0a33c;
+  --accent-hover: #edb451;
+  --accent-soft: #2a2113;
+  --accent-ink: #13110e;
+  --pop: #4af626;
+  --success: #4af626;
+  --success-soft: #16240f;
+  --warning: #e0a33c;
+  --warn: #e0a33c;
+  --warning-soft: #2a2113;
+  --danger: #f2705e;
+  --danger-soft: #2c1613;
+  --grid-color: rgba(224, 163, 60, 0.05);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45);
+  --shadow-md: 0 10px 30px rgba(0, 0, 0, 0.55);
 }
 
 * {
@@ -60,10 +315,12 @@ body,
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif;
-  font-size: 13.5px;
+  font-family: var(--font-ui);
+  font-size: var(--fs-body);
+  letter-spacing: -0.01em;
   color: var(--text);
   background: var(--bg);
+  transition: background-color var(--t-base) var(--ease-out), color var(--t-base) var(--ease-out);
   /* App chrome behaves like a native app: text isn't selectable. WKWebView
      needs the -webkit- prefix (no autoprefixer in this build). Selection is
      re-enabled below where it's actually useful. */
@@ -88,6 +345,8 @@ h1,
 h2,
 h3 {
   margin: 0;
+  font-weight: 700;
+  letter-spacing: -0.01em;
 }
 
 .titlebar-drag {
@@ -576,8 +835,10 @@ h3 {
 
 .list-head h2,
 .panel-head h2 {
-  font-size: 15px;
-  letter-spacing: -0.01em;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 
 .list-scroll {
@@ -1308,20 +1569,21 @@ h3 {
   border: 1px solid var(--border-strong);
   background: var(--bg-elevated);
   color: var(--text);
-  border-radius: var(--radius-sm);
-  padding: 7px 13px;
+  border-radius: var(--radius-pill);
+  padding: 7px 15px;
   font-size: 12.5px;
-  font-weight: 550;
-  box-shadow: var(--shadow-sm);
-  transition: background 0.12s, border-color 0.12s, transform 0.04s;
+  font-weight: 500;
+  transition: background var(--t-fast) var(--ease-out), border-color var(--t-fast) var(--ease-out),
+    transform var(--t-fast) var(--ease-out);
 }
 
 .btn:hover {
   background: var(--bg-hover);
+  border-color: var(--text-tertiary);
 }
 
 .btn:active {
-  transform: translateY(0.5px);
+  transform: scale(0.97);
 }
 
 .btn:disabled {
@@ -1332,19 +1594,35 @@ h3 {
 .btn-primary {
   background: var(--accent);
   border-color: transparent;
-  color: #fff;
+  color: var(--accent-ink);
 }
 
 .btn-primary:hover {
   background: var(--accent-hover);
+  border-color: transparent;
 }
 
 .btn-lg {
   width: 100%;
   justify-content: center;
   padding: 11px;
-  font-size: 14px;
-  border-radius: var(--radius);
+  font-size: 13.5px;
+  font-weight: 600;
+  border-radius: var(--radius-pill);
+}
+
+/* One consistent keyboard focus ring on every interactive control. */
+.btn:focus-visible,
+.btn-primary:focus-visible,
+.action-btn:focus-visible,
+.icon-btn:focus-visible,
+.link-btn:focus-visible,
+.seg-btn:focus-visible,
+.theme-card:focus-visible,
+.accent-pick:focus-visible,
+.nav-item:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
 }
 
 .action-btn {
@@ -1354,17 +1632,22 @@ h3 {
   border: 1px solid var(--border);
   background: var(--bg-elevated);
   color: var(--text-secondary);
-  border-radius: var(--radius-sm);
-  padding: 5px 10px;
+  border-radius: var(--radius-pill);
+  padding: 5px 12px;
   font-size: 12px;
   font-weight: 500;
-  transition: background 0.12s, color 0.12s, border-color 0.12s;
+  transition: background var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out),
+    border-color var(--t-fast) var(--ease-out), transform var(--t-fast) var(--ease-out);
 }
 
 .action-btn:hover {
   background: var(--bg-hover);
   color: var(--text);
   border-color: var(--border-strong);
+}
+
+.action-btn:active {
+  transform: scale(0.97);
 }
 
 .icon-btn {
@@ -1376,12 +1659,17 @@ h3 {
   color: var(--text-tertiary);
   border-radius: var(--radius-sm);
   padding: 6px;
-  transition: background 0.12s, color 0.12s;
+  transition: background var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out),
+    transform var(--t-fast) var(--ease-out);
 }
 
 .icon-btn:hover {
   background: var(--bg-hover);
   color: var(--text);
+}
+
+.icon-btn:active {
+  transform: scale(0.92);
 }
 
 .icon-btn:disabled {
@@ -3160,4 +3448,255 @@ h3 {
   font-size: 13px;
   font-weight: 550;
   color: var(--text);
+}
+
+/* ============================================================ Appearance
+   Theme picker, accent picks, and the reusable segmented control. */
+
+.settings-row-stack {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+}
+
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.theme-card {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 8px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  text-align: left;
+  color: var(--text);
+  transition: border-color var(--t-fast) var(--ease-out), transform var(--t-fast) var(--ease-out),
+    box-shadow var(--t-fast) var(--ease-out);
+}
+
+.theme-card:hover {
+  border-color: var(--border-strong);
+}
+
+.theme-card:active {
+  transform: scale(0.985);
+}
+
+.theme-card.is-active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.theme-card-swatch {
+  position: relative;
+  flex: none;
+  width: 46px;
+  height: 38px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.theme-card-dot {
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  width: 9px;
+  height: 9px;
+  border-radius: var(--radius-pill);
+  box-shadow: 0 0 0 1.5px var(--bg-elevated);
+}
+
+.theme-card-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.theme-card-label {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.theme-card-blurb {
+  font-size: 10.5px;
+  color: var(--text-tertiary);
+  letter-spacing: 0.02em;
+}
+
+.accent-picks {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.accent-pick {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-pill);
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  padding: 0;
+  transition: transform var(--t-fast) var(--ease-out), box-shadow var(--t-fast) var(--ease-out);
+}
+
+.accent-pick:hover {
+  transform: scale(1.08);
+}
+
+.accent-pick.is-active {
+  box-shadow: 0 0 0 2px var(--bg-elevated), 0 0 0 4px var(--accent);
+}
+
+.accent-pick-default {
+  width: auto;
+  height: 24px;
+  padding: 0 12px;
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+}
+
+.accent-pick-default.is-active {
+  color: var(--accent);
+  border-color: var(--accent);
+  box-shadow: none;
+}
+
+.accent-custom {
+  display: inline-flex;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+  border: 1px dashed var(--border-strong);
+  cursor: pointer;
+}
+
+.accent-custom input[type="color"] {
+  width: 200%;
+  height: 200%;
+  margin: -50%;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+
+/* Reusable segmented control (mode, assistant modes, match-mode, etc.) */
+.seg {
+  display: inline-flex;
+  padding: 2px;
+  gap: 2px;
+  background: var(--bg-active);
+  border-radius: var(--radius-pill);
+}
+
+.seg-btn {
+  font: inherit;
+  font-size: 11.5px;
+  letter-spacing: 0.03em;
+  padding: 5px 12px;
+  border: none;
+  border-radius: var(--radius-pill);
+  color: var(--text-secondary);
+  background: transparent;
+  transition: color var(--t-fast) var(--ease-out), background var(--t-fast) var(--ease-out);
+}
+
+.seg-btn:hover {
+  color: var(--text);
+}
+
+.seg-btn.is-active {
+  color: var(--accent-ink);
+  background: var(--accent);
+}
+
+/* ============================================================ Motion utils */
+
+/* Warm graph-paper texture for large empty canvases (sign-in, empty states).
+   Never placed on scrolling lists. */
+.canvas-grid {
+  background-image:
+    linear-gradient(to right, var(--grid-color) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid-color) 1px, transparent 1px);
+  background-size: var(--grid-size) var(--grid-size);
+}
+
+/* Gentle fade-up entrance; set --i on list items for a stagger. */
+@media (prefers-reduced-motion: no-preference) {
+  .rise {
+    opacity: 0;
+    transform: translateY(10px);
+    animation: rise var(--t-slow) var(--ease-out) forwards;
+    animation-delay: calc(var(--i, 0) * 40ms);
+  }
+}
+
+@keyframes rise {
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* A quiet mono "thinking" pulse for triage/assistant work. */
+.dot-pulse {
+  display: inline-flex;
+  gap: 4px;
+  color: var(--text-tertiary);
+}
+
+.dot-pulse span {
+  width: 4px;
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: currentColor;
+  animation: dot-pulse 1.2s var(--ease-out) infinite;
+}
+
+.dot-pulse span:nth-child(2) {
+  animation-delay: 0.18s;
+}
+
+.dot-pulse span:nth-child(3) {
+  animation-delay: 0.36s;
+}
+
+@keyframes dot-pulse {
+  0%, 100% {
+    opacity: 0.25;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+
+/* Accessibility: collapse all motion when the user asks for less. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

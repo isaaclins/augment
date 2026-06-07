@@ -84,6 +84,7 @@ import {
   type ComposeMode,
 } from "../lib/features/compose";
 import { broadcastSettings, onSettingsBroadcast } from "../lib/settingsSync";
+import { applyTheme } from "../lib/theme";
 
 export type Status = "restoring" | "signedOut" | "authenticating" | "ready" | "error";
 export type View =
@@ -2068,6 +2069,7 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
     settingsRef.current = next;
     setSettings(next);
     saveSettings(next);
+    applyTheme(next);
     // Mirror the change into the dedicated settings window (and vice-versa).
     broadcastSettings(next);
   }, []);

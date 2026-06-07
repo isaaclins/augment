@@ -9,6 +9,7 @@ import type { Tag } from "./tags";
 import { normalizeLabel, type TriageResult } from "./features/triage";
 import type { AssistantMessage, AssistantMode } from "./features/assistant";
 import { DEFAULT_KEYBINDS, type Keybinds } from "./keybinds";
+import type { ThemeId, ThemeMode } from "./theme";
 
 const RULES_KEY = "augment.rules.v1";
 const SETTINGS_KEY = "augment.settings.v1";
@@ -50,6 +51,12 @@ export interface Settings {
   suggestedLabels: string[];
   /** Ollama model for the assistant; empty falls back to `triageModel`. */
   assistantModel: string;
+  /** Color theme palette. */
+  theme: ThemeId;
+  /** Light/dark preference; "system" follows the OS. */
+  mode: ThemeMode;
+  /** Optional custom accent hex (overrides the theme's accent when set). */
+  accent: string;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -63,6 +70,9 @@ export const DEFAULT_SETTINGS: Settings = {
   syncLabelsToGmail: true,
   suggestedLabels: [],
   assistantModel: "",
+  theme: "cafe",
+  mode: "system",
+  accent: "",
 };
 
 function readJson<T>(key: string, fallback: T): T {

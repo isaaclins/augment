@@ -9,9 +9,148 @@ import {
   type NavAction,
 } from "../lib/keybinds";
 import { checkOllama } from "../lib/features/triage";
+import { THEMES, type ThemeId, type ThemeMode } from "../lib/theme";
 import { CloseIcon, CpuIcon, RefreshIcon } from "./icons";
 
 type TestState = "idle" | "testing" | "ok" | "fail";
+
+// Eight quick-pick accents (used by the custom-accent row). Warm-leaning set
+// that sits comfortably on every palette's surfaces.
+const ACCENT_PICKS = [
+  "#5d4432",
+  "#b45309",
+  "#c2410c",
+  "#2f5d3a",
+  "#0f766e",
+  "#2563eb",
+  "#6d28d9",
+  "#be185d",
+];
+
+const MODES: { id: ThemeMode; label: string }[] = [
+  { id: "system", label: "System" },
+  { id: "light", label: "Light" },
+  { id: "dark", label: "Dark" },
+];
+
+// Appearance: theme palette picker, custom accent, and light/dark/system mode.
+// Every change re-skins the whole app live (updateSettings calls applyTheme and
+// broadcasts to the other window).
+function AppearanceSection({
+  settings,
+  updateSettings,
+}: {
+  settings: Settings;
+  updateSettings: (patch: Partial<Settings>) => void;
+}) {
+  const activeTheme = settings.theme || "cafe";
+  const accent = (settings.accent || "").toLowerCase();
+  const themeAccent = THEMES.find((t) => t.id === activeTheme)?.swatch.accent ?? "#5d4432";
+
+  return (
+    <section className="settings-section">
+      <div className="settings-section-head">
+        <div>
+          <h3>Appearance</h3>
+          <p className="settings-section-sub">
+            Pick a palette, set a custom accent, and choose how light and dark follow your system.
+          </p>
+        </div>
+      </div>
+
+      <div className="settings-rows">
+        <div className="settings-row settings-row-stack">
+          <div className="settings-row-text">
+            <span className="settings-row-label">Theme</span>
+            <span className="settings-row-hint">The mono type system stays the same — only color changes.</span>
+          </div>
+          <div className="theme-grid" role="radiogroup" aria-label="Color theme">
+            {THEMES.map((theme) => (
+              <button
+                key={theme.id}
+                type="button"
+                role="radio"
+                aria-checked={activeTheme === theme.id}
+                className={`theme-card ${activeTheme === theme.id ? "is-active" : ""}`}
+                onClick={() => updateSettings({ theme: theme.id as ThemeId })}
+              >
+                <span
+                  className="theme-card-swatch"
+                  style={{ background: theme.swatch.bg, color: theme.swatch.text }}
+                >
+                  <span style={{ color: theme.swatch.text }}>Aa</span>
+                  <span className="theme-card-dot" style={{ background: theme.swatch.accent }} />
+                </span>
+                <span className="theme-card-meta">
+                  <span className="theme-card-label">{theme.label}</span>
+                  <span className="theme-card-blurb">{theme.blurb}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="settings-row settings-row-stack">
+          <div className="settings-row-text">
+            <span className="settings-row-label">Accent</span>
+            <span className="settings-row-hint">Override the theme's accent, or keep the default.</span>
+          </div>
+          <div className="accent-picks">
+            <button
+              type="button"
+              className={`accent-pick accent-pick-default ${accent ? "" : "is-active"}`}
+              title="Use the theme's accent"
+              onClick={() => updateSettings({ accent: "" })}
+            >
+              Theme
+            </button>
+            {ACCENT_PICKS.map((hex) => (
+              <button
+                key={hex}
+                type="button"
+                className={`accent-pick ${accent === hex ? "is-active" : ""}`}
+                style={{ background: hex }}
+                title={hex}
+                aria-label={`Accent ${hex}`}
+                onClick={() => updateSettings({ accent: hex })}
+              />
+            ))}
+            <label className="accent-custom" title="Custom accent">
+              <input
+                type="color"
+                value={accent || themeAccent}
+                onChange={(e) => updateSettings({ accent: e.target.value })}
+              />
+            </label>
+          </div>
+        </div>
+
+        <div className="settings-row">
+          <div className="settings-row-text">
+            <span className="settings-row-label">Mode</span>
+            <span className="settings-row-hint">"System" follows your macOS light/dark setting.</span>
+          </div>
+          <div className="settings-row-control">
+            <div className="seg" role="radiogroup" aria-label="Appearance mode">
+              {MODES.map((m) => (
+                <button
+                  key={m.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={(settings.mode || "system") === m.id}
+                  className={`seg-btn ${(settings.mode || "system") === m.id ? "is-active" : ""}`}
+                  onClick={() => updateSettings({ mode: m.id })}
+                >
+                  {m.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
 
 // "Local AI triage" settings: a master toggle plus model/endpoint and a live
 // connection test against the local Ollama daemon.
@@ -298,6 +437,8 @@ export function SettingsView({
       </div>
 
       <div className="settings-scroll">
+        <AppearanceSection settings={settings} updateSettings={updateSettings} />
+
         <section className="settings-section">
           <div className="settings-section-head">
             <div>

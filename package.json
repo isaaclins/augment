@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@fontsource/ibm-plex-mono": "^5.2.7",
     "@sqlite.org/sqlite-wasm": "^3.53.0-build1",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-notification": "^2",
