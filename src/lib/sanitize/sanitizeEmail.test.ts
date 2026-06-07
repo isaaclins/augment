@@ -111,3 +111,28 @@ describe("buildSrcDoc / renderEmailSrcDoc", () => {
     expect(result.srcDoc).not.toContain("<script>");
   });
 });
+
+describe("sanitizeEmailHtml — allowRemote (explicit user opt-in)", () => {
+  it("keeps remote <img> src and counts nothing as blocked when allowed", () => {
+    const { clean, blockedRemoteCount } = sanitizeEmailHtml('<img src="https://cdn.example.com/logo.png">', true);
+    expect(clean).toContain("https://cdn.example.com/logo.png");
+    expect(clean).not.toContain("data-blocked");
+    expect(blockedRemoteCount).toBe(0);
+  });
+
+  it("still strips javascript: src even when remote is allowed", () => {
+    expect(sanitizeEmailHtml('<img src="javascript:alert(1)">', true).clean).not.toContain("javascript:");
+  });
+
+  it("widens the iframe CSP img-src only when allowed", () => {
+    expect(buildSrcDoc("<p>x</p>")).toContain("img-src data:;");
+    expect(buildSrcDoc("<p>x</p>", true)).toContain("img-src data: https: http:;");
+  });
+
+  it("renderEmailSrcDoc threads the allowRemote option through", () => {
+    expect(renderEmailSrcDoc({ html: '<img src="https://a/x.png">' }).blockedRemoteCount).toBe(1);
+    const allowed = renderEmailSrcDoc({ html: '<img src="https://a/x.png">' }, { allowRemote: true });
+    expect(allowed.blockedRemoteCount).toBe(0);
+    expect(allowed.srcDoc).toContain("https://a/x.png");
+  });
+});

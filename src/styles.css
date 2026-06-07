@@ -1109,20 +1109,52 @@ h3 {
 .email-shield {
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 7px 20px;
-  font-size: 11.5px;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 5px 16px;
+  font-size: 10.5px;
   color: var(--text-secondary);
   background: var(--accent-soft);
   border-bottom: 1px solid var(--border);
 }
 
-.email-shield-mode {
+.email-shield-actions {
   margin-left: auto;
-  color: var(--text-tertiary);
+  display: flex;
+  gap: 6px;
+}
+
+.email-shield-btn {
+  font: inherit;
   font-size: 10.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  font-weight: 600;
+  padding: 2px 9px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-elevated);
+  color: var(--text);
+  transition: background var(--t-fast) var(--ease-out), border-color var(--t-fast) var(--ease-out),
+    transform var(--t-fast) var(--ease-out);
+}
+
+.email-shield-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--text-tertiary);
+}
+
+.email-shield-btn:active {
+  transform: scale(0.97);
+}
+
+.email-shield-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
+}
+
+.allow-sender {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  word-break: break-all;
 }
 
 .email-frame {

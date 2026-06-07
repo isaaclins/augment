@@ -484,6 +484,46 @@ export function SettingsView({
           </div>
         </section>
 
+        <section className="settings-section">
+          <div className="settings-section-head">
+            <div>
+              <h3>Remote content</h3>
+              <p className="settings-section-sub">
+                Email images are blocked until you allow them. Senders here load remote content
+                automatically — add one with "Allow from sender" in an email.
+              </p>
+            </div>
+          </div>
+
+          <div className="settings-rows">
+            {settings.allowedSenders.length === 0 ? (
+              <div className="settings-row">
+                <span className="settings-row-hint">No allowed senders yet.</span>
+              </div>
+            ) : (
+              settings.allowedSenders.map((sender) => (
+                <div className="settings-row" key={sender}>
+                  <span className="settings-row-label allow-sender">{sender}</span>
+                  <div className="settings-row-control">
+                    <button
+                      className="icon-btn"
+                      type="button"
+                      title="Remove — block remote content from this sender again"
+                      onClick={() =>
+                        updateSettings({
+                          allowedSenders: settings.allowedSenders.filter((s) => s !== sender),
+                        })
+                      }
+                    >
+                      <CloseIcon size={13} />
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
+
         <TriageSection settings={settings} updateSettings={updateSettings} />
       </div>
     </div>

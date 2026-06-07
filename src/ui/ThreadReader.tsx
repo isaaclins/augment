@@ -64,14 +64,20 @@ function MessageRail({
 }
 
 export function ThreadReader() {
-  const { reader, selectedId, archiveThread, snooze, watch, openInGmail, closeThread, composeReply } =
+  const { reader, selectedId, archiveThread, snooze, watch, openInGmail, closeThread, composeReply, settings, updateSettings } =
     useAugment();
   const [activeIndex, setActiveIndex] = useState(0);
+  // Remote content is opt-in. "Allow these" turns it on for the current message
+  // this session; switching message or thread resets it.
+  const [allowOnce, setAllowOnce] = useState(false);
 
   const threadId = reader?.threadId;
   useEffect(() => {
     setActiveIndex(0);
   }, [threadId]);
+  useEffect(() => {
+    setAllowOnce(false);
+  }, [threadId, activeIndex]);
 
   if (!selectedId) {
     return (
@@ -113,6 +119,10 @@ export function ThreadReader() {
   const active = messages[index];
   const subject = messages[messages.length - 1]?.subject ?? "(no subject)";
   const toLine = active.to.map(addressLabel).join(", ");
+
+  const senderEmail = active.from.email.toLowerCase();
+  const senderAllowed = settings.allowedSenders.includes(senderEmail);
+  const allowRemote = senderAllowed || allowOnce;
 
   return (
     <div className="reader">
@@ -180,7 +190,16 @@ export function ThreadReader() {
 
       <MessageRail messages={messages} activeIndex={index} onSelect={setActiveIndex} />
 
-      <EmailView html={active.html} text={active.text} />
+      <EmailView
+        html={active.html}
+        text={active.text}
+        allowRemote={allowRemote}
+        senderAllowed={senderAllowed}
+        onAllowOnce={() => setAllowOnce(true)}
+        onAllowSender={() =>
+          updateSettings({ allowedSenders: [...settings.allowedSenders, senderEmail] })
+        }
+      />
     </div>
   );
 }

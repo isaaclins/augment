@@ -58,6 +58,8 @@ export interface Settings {
   mode: ThemeMode;
   /** Optional custom accent hex (overrides the theme's accent when set). */
   accent: string;
+  /** Sender addresses allowed to load remote content (images) in the reader. */
+  allowedSenders: string[];
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -74,6 +76,7 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: "cafe",
   mode: "system",
   accent: "",
+  allowedSenders: [],
 };
 
 function readJson<T>(key: string, fallback: T): T {
