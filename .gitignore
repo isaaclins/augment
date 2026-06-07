@@ -31,3 +31,9 @@ pnpm-debug.log*
 *.njsproj
 *.sln
 *.sw?
+
+# AI-authored working docs (kept locally, not published)
+MEMORY.md
+SKILLS.md
+REDESIGN_PROMPT.md
+UI-AUDIT.md
