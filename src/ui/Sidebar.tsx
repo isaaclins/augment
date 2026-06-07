@@ -2,6 +2,10 @@ import { useState } from "react";
 import { useAugment, type View } from "../state/augment";
 import { formatRelative } from "../lib/time";
 import { formatCombo } from "../lib/keybinds";
+import type { Tag } from "../lib/tags";
+import { openSettingsWindow } from "../lib/window";
+import { TagGlyph } from "./tags";
+import { TagEditor } from "./TagEditor";
 import {
   ClockIcon,
   CloseIcon,
@@ -10,9 +14,11 @@ import {
   FolderIcon,
   InboxIcon,
   MailIcon,
+  PencilIcon,
   PlusIcon,
   SettingsIcon,
   SlidersIcon,
+  SparkleIcon,
 } from "./icons";
 import type { ReactNode } from "react";
 
@@ -44,11 +50,17 @@ export function Sidebar() {
     createFolder,
     removeFolder,
     openFolder,
+    tags,
+    activeTagId,
+    openTag,
+    deleteTag,
     settings,
   } = useAugment();
 
   const [adding, setAdding] = useState(false);
   const [draftName, setDraftName] = useState("");
+  // Open tag editor: { tag: null } for a new tag, { tag } to edit an existing one.
+  const [tagEditor, setTagEditor] = useState<{ tag: Tag | null } | null>(null);
 
   const counts: Record<string, number | null> = {
     inbox: null,
@@ -157,6 +169,62 @@ export function Sidebar() {
         </div>
       </div>
 
+      <div className="sidebar-tags">
+        <div className="sidebar-section-head">
+          <span>Tags</span>
+          <button
+            type="button"
+            className="section-add"
+            title="New tag"
+            onClick={() => setTagEditor({ tag: null })}
+          >
+            <PlusIcon size={14} />
+          </button>
+        </div>
+
+        <div className="tag-list">
+          {tags.length === 0 && <div className="folder-empty">No tags yet.</div>}
+          {tags.map((tag) => {
+            const active = view === "tag" && activeTagId === tag.id;
+            return (
+              <div className="folder-row tag-row" key={tag.id}>
+                <button
+                  type="button"
+                  className={`nav-item folder-item tag-item ${active ? "nav-item-active" : ""}`}
+                  onClick={() => openTag(tag)}
+                >
+                  <span className="nav-icon">
+                    <TagGlyph color={tag.color} icon={tag.icon} size={16} />
+                  </span>
+                  <span className="nav-label">{tag.name}</span>
+                  {tag.source === "auto" && (
+                    <SparkleIcon size={11} className="tag-auto-mark" />
+                  )}
+                </button>
+                <div className="tag-row-actions">
+                  <button
+                    type="button"
+                    className="tag-action"
+                    title="Edit tag"
+                    onClick={() => setTagEditor({ tag })}
+                  >
+                    <PencilIcon size={13} />
+                  </button>
+                  <button
+                    type="button"
+                    className="tag-action tag-action-del"
+                    title="Remove tag"
+                    onClick={() => deleteTag(tag.id)}
+                  >
+                    <CloseIcon size={13} />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
       <div className="sidebar-activity">
         <div className="sidebar-activity-head">Activity</div>
         <div className="sidebar-activity-list">
@@ -173,13 +241,15 @@ export function Sidebar() {
 
       <button
         type="button"
-        className={`nav-item sidebar-settings ${view === "settings" ? "nav-item-active" : ""}`}
-        onClick={() => setView("settings")}
+        className="nav-item sidebar-settings"
+        title="Open settings"
+        onClick={() => void openSettingsWindow()}
       >
         <span className="nav-icon">
           <SettingsIcon size={17} />
         </span>
         <span className="nav-label">Settings</span>
+        <kbd className="nav-shortcut">{formatCombo("mod+,")}</kbd>
       </button>
 
       <div className="sidebar-account">
@@ -190,6 +260,8 @@ export function Sidebar() {
           Sign out
         </button>
       </div>
+
+      {tagEditor && <TagEditor initial={tagEditor.tag} onClose={() => setTagEditor(null)} />}
     </aside>
   );
 }

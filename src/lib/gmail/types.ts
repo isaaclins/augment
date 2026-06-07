@@ -29,6 +29,18 @@ export interface GmailDraft {
   message?: GmailMessage;
 }
 
+export interface GmailHistoryRecord {
+  id: string;
+  messagesAdded?: { message: GmailMessageRef }[];
+  messagesDeleted?: { message: GmailMessageRef }[];
+}
+
+export interface GmailHistoryResponse {
+  history?: GmailHistoryRecord[];
+  historyId?: string;
+  nextPageToken?: string;
+}
+
 export interface GmailHeader {
   name: string;
   value: string;

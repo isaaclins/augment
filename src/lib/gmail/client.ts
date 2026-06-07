@@ -5,6 +5,7 @@
 
 import type {
   GmailDraft,
+  GmailHistoryResponse,
   GmailLabel,
   GmailLabelsListResponse,
   GmailMessage,
@@ -104,6 +105,18 @@ export class GmailClient {
   }
 
   /**
+   * Incremental mailbox changes since `startHistoryId`. Throws a 404
+   * GmailApiError when the id is too old (history expired) — caller re-syncs.
+   */
+  listHistory(startHistoryId: string, pageToken?: string): Promise<GmailHistoryResponse> {
+    const params = new URLSearchParams({ startHistoryId });
+    params.append("historyTypes", "messageAdded");
+    params.append("historyTypes", "messageDeleted");
+    if (pageToken) params.set("pageToken", pageToken);
+    return this.request<GmailHistoryResponse>(`/history?${params.toString()}`);
+  }
+
+  /**
    * Insert a message straight into the mailbox (like IMAP APPEND) — this does
    * NOT send anything. Used to store templates as labeled messages.
    */
@@ -127,6 +140,18 @@ export class GmailClient {
     });
   }
 
+  /**
+   * Send a base64url RFC 2822 message. Pass `threadId` to keep a reply in its
+   * original thread (the message's References/In-Reply-To must also match).
+   * Requires the `gmail.send` scope — a 403 means the account needs reconnecting.
+   */
+  sendMessage(raw: string, threadId?: string): Promise<GmailMessage> {
+    return this.request<GmailMessage>("/messages/send", {
+      method: "POST",
+      body: JSON.stringify(threadId ? { raw, threadId } : { raw }),
+    });
+  }
+
   listLabels(): Promise<GmailLabelsListResponse> {
     return this.request<GmailLabelsListResponse>("/labels");
   }
@@ -136,6 +161,19 @@ export class GmailClient {
       method: "POST",
       body: JSON.stringify({ name, labelListVisibility: "labelShow", messageListVisibility: "show" }),
     });
+  }
+
+  /** Rename an existing label (used when a tag is renamed). Keeps the cache fresh. */
+  async updateLabel(id: string, name: string): Promise<GmailLabel> {
+    const updated = await this.request<GmailLabel>(`/labels/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ name }),
+    });
+    if (this.labelCache) {
+      const index = this.labelCache.findIndex((label) => label.id === id);
+      if (index >= 0) this.labelCache[index] = updated;
+    }
+    return updated;
   }
 
   modifyThread(id: string, body: ModifyLabels): Promise<GmailThread> {
@@ -166,6 +204,11 @@ export class GmailClient {
 
   archiveThread(id: string): Promise<GmailThread> {
     return this.modifyThread(id, { removeLabelIds: ["INBOX"] });
+  }
+
+  /** Move a whole thread to Trash (reversible; works under gmail.modify). */
+  trashThread(id: string): Promise<GmailThread> {
+    return this.request<GmailThread>(`/threads/${encodeURIComponent(id)}/trash`, { method: "POST" });
   }
 
   unarchiveThread(id: string): Promise<GmailThread> {

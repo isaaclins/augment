@@ -1626,6 +1626,172 @@ h3 {
   margin-left: 2px;
 }
 
+/* ------------------------------------------------------ Search palette */
+
+.palette-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 12vh;
+  background: rgba(10, 12, 18, 0.34);
+}
+
+.palette {
+  width: 560px;
+  max-width: calc(100vw - 48px);
+  max-height: 64vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
+
+.palette-input-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-tertiary);
+}
+
+.palette-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 15px;
+}
+
+.palette-esc {
+  font-size: 10.5px;
+  color: var(--text-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 1px 6px;
+}
+
+.palette-results {
+  overflow-y: auto;
+  padding: 6px;
+  min-height: 0;
+}
+
+.palette-empty {
+  padding: 28px 16px;
+  text-align: center;
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+
+.palette-row {
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  padding: 9px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.palette-row-active {
+  background: var(--bg-active);
+}
+
+.palette-row-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.palette-from {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.palette-date {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.palette-subject {
+  font-size: 12.5px;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.palette-row-active .palette-subject,
+.palette-row-active .palette-from {
+  color: var(--accent);
+}
+
+.palette-snippet {
+  font-size: 12px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.palette-foot {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.palette-foot kbd {
+  font-family: inherit;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0 5px;
+  margin-right: 3px;
+}
+
+.palette-count {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.palette-link {
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+
+.palette-link:hover {
+  text-decoration: underline;
+}
+
 /* ------------------------------------------------------------- Spinner */
 
 .spinner {
@@ -1812,4 +1978,716 @@ h3 {
 /* Keep the clear button's footprint when unset so the chips stay aligned. */
 .keybind-clear.is-hidden {
   visibility: hidden;
+}
+
+/* ---------------------------------------------------------------- Tags */
+
+/* Sidebar tag list — mirrors the folders list but with two hover actions. */
+.sidebar-tags {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tag-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.tag-item {
+  /* Room for the two hover-revealed action buttons. */
+  padding-right: 48px;
+}
+
+.tag-row-actions {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  gap: 1px;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+
+.tag-row:hover .tag-row-actions {
+  opacity: 1;
+}
+
+.tag-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.tag-action:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.tag-action-del:hover {
+  color: var(--danger);
+}
+
+/* Colored chip shown on inbox rows (and in the editor preview). Colors are set
+   inline from the tag palette; this only handles shape + layout. */
+.row-tags {
+  display: flex;
+  gap: 5px;
+  margin-top: 5px;
+  overflow: hidden;
+}
+
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 160px;
+  padding: 1px 8px 1px 6px;
+  border: 1px solid;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.tag-chip svg {
+  flex-shrink: 0;
+}
+
+.tag-chip-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ------------------------------------------------------------- Modal */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  background: rgba(15, 18, 30, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.modal {
+  width: 420px;
+  max-width: 100%;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.modal-head {
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.modal-head h2 {
+  font-size: 15px;
+  letter-spacing: -0.01em;
+}
+
+.modal-body {
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.modal-foot {
+  padding: 12px 18px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.modal-foot-right {
+  display: flex;
+  gap: 10px;
+}
+
+.tag-preview {
+  display: flex;
+  justify-content: center;
+  padding: 14px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.field-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-tertiary);
+}
+
+.swatch-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.swatch {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.08s, box-shadow 0.12s;
+}
+
+.swatch:hover {
+  transform: translateY(-1px);
+}
+
+.swatch-active {
+  box-shadow: 0 0 0 2px var(--bg-elevated), 0 0 0 4px var(--text);
+}
+
+.icon-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 6px;
+}
+
+.icon-option {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s;
+}
+
+.icon-option:hover {
+  background: var(--bg-hover);
+}
+
+.icon-option-active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+.btn-danger {
+  color: var(--danger);
+  border-color: transparent;
+  background: rgba(224, 83, 61, 0.12);
+}
+
+.btn-danger:hover {
+  background: rgba(224, 83, 61, 0.2);
+}
+
+/* ----------------------------------------------- Settings window (its own webview) */
+
+.settings-window {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+
+/* It has a real native title bar, so the panel can start at the very top. */
+.settings-window .panel-head {
+  padding-top: 16px;
+}
+
+/* ------------------------------------------------------- Local AI triage */
+
+/* The one-line model summary under a row's snippet. */
+.row-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  overflow: hidden;
+}
+
+.row-summary svg {
+  flex-shrink: 0;
+  color: var(--accent);
+}
+
+.row-summary span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The category chip reuses .tag-chip; this just nudges the sparkle. */
+.triage-chip svg {
+  opacity: 0.85;
+}
+
+/* Small attention pill for high-priority mail. */
+.triage-priority {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #fff;
+  background: var(--danger);
+}
+
+/* Section heading with its leading icon (Local AI triage). */
+.settings-section-head h3 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+/* Groups the refresh + triage buttons on the right of the list header. */
+.list-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* Connection-test status next to the button. */
+.triage-status {
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.triage-status-ok {
+  color: var(--success);
+}
+
+.triage-status-fail {
+  color: var(--danger);
+}
+
+/* ---------------------------------------------------- List sort + filter */
+
+.list-head-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.filter-clear {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 550;
+}
+
+.filter-clear:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.sort-select {
+  padding: 4px 6px;
+  font-size: 12px;
+}
+
+.sort-dir {
+  min-width: 26px;
+  font-size: 14px;
+  line-height: 1;
+}
+
+/* -------------------------------------------------------- Assistant panel */
+
+/* Proposed (not-yet-approved) label chip: dashed outline, no fill. */
+.triage-chip-proposed {
+  border-style: dashed;
+}
+
+/* ✨ marker on auto-origin tags in the sidebar. */
+.tag-auto-mark {
+  margin-left: 4px;
+  color: var(--accent);
+  opacity: 0.6;
+  flex-shrink: 0;
+}
+
+/* The header ✨ that toggles the assistant, with its suggestion-count badge. */
+.assistant-toggle {
+  position: relative;
+}
+
+.assistant-toggle.is-active {
+  color: var(--accent);
+  background: var(--bg-hover);
+}
+
+.assistant-badge {
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 14px;
+  text-align: center;
+}
+
+/* Right-side drawer. Fixed so it overlays the reader without reflowing the grid. */
+.assistant-panel {
+  position: fixed;
+  top: var(--titlebar-h);
+  right: 0;
+  bottom: 0;
+  width: 340px;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-elevated);
+  border-left: 1px solid var(--border);
+  box-shadow: var(--shadow-md);
+  z-index: 40;
+}
+
+.assistant-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.assistant-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--text);
+}
+
+.assistant-title svg {
+  color: var(--accent);
+}
+
+.assistant-head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.assistant-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 10px 12px;
+}
+
+.assistant-section-head {
+  padding: 2px 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary);
+}
+
+.assistant-empty {
+  padding: 6px 2px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-tertiary);
+}
+
+.suggestion-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.suggestion-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+}
+
+.suggestion-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.suggestion-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.suggestion-count {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.suggestion-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.btn-approve {
+  padding: 5px 10px;
+  font-size: 12px;
+  background: var(--accent);
+  border-color: transparent;
+  color: #fff;
+  box-shadow: none;
+}
+
+.btn-approve:hover {
+  background: var(--accent-hover);
+}
+
+.assistant-foot {
+  padding: 9px 12px;
+  border-top: 1px solid var(--border);
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--text-tertiary);
+}
+
+/* Mode selector (Ask / Request / Agent). */
+.assistant-modes {
+  display: flex;
+  gap: 4px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.assistant-mode {
+  flex: 1;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 550;
+}
+
+.assistant-mode:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.assistant-mode.is-active {
+  background: var(--accent);
+  border-color: transparent;
+  color: #fff;
+}
+
+.assistant-suggestions {
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.assistant-examples {
+  margin: 8px 0 0;
+  padding-left: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.assistant-selinfo {
+  margin-top: 8px;
+  color: var(--accent);
+  font-weight: 550;
+}
+
+/* Conversation. */
+.chat-log {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.chat-msg {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 100%;
+}
+
+.chat-user {
+  align-items: flex-end;
+}
+
+.chat-bubble {
+  max-width: 88%;
+  padding: 7px 11px;
+  border-radius: 12px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.chat-user .chat-bubble {
+  background: var(--accent);
+  color: #fff;
+  border-bottom-right-radius: 4px;
+}
+
+.chat-assistant .chat-bubble {
+  background: var(--bg-hover);
+  color: var(--text);
+  border-bottom-left-radius: 4px;
+}
+
+.chat-thinking {
+  color: var(--text-tertiary);
+}
+
+/* Proposal card (Request mode) + executed/cancelled summaries. */
+.proposal {
+  width: 100%;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  padding: 9px 11px;
+}
+
+.proposal-proposed {
+  border-color: var(--accent);
+}
+
+.proposal-list {
+  margin: 0 0 8px;
+  padding-left: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.proposal-cancelled .proposal-list {
+  color: var(--text-tertiary);
+  text-decoration: line-through;
+}
+
+.proposal-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.proposal-status {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-tertiary);
+}
+
+/* Input. */
+.assistant-input {
+  border-top: 1px solid var(--border);
+  padding: 9px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.assistant-input-ctx {
+  font-size: 11px;
+  font-weight: 550;
+  color: var(--accent);
+}
+
+.assistant-input-row {
+  display: flex;
+  gap: 6px;
+  align-items: flex-end;
+}
+
+.assistant-textarea {
+  flex: 1;
+  resize: none;
+  max-height: 120px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-elevated);
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  padding: 7px 10px;
+  font-size: 12.5px;
+  font-family: inherit;
+  outline: none;
+}
+
+.assistant-send {
+  flex-shrink: 0;
+}
+
+.assistant-clear {
+  align-self: flex-start;
 }

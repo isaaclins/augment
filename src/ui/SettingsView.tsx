@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useAugment } from "../state/augment";
+import type { Settings } from "../lib/store";
 import {
   DEFAULT_KEYBINDS,
   NAV_ACTIONS,
@@ -8,7 +8,204 @@ import {
   type Keybinds,
   type NavAction,
 } from "../lib/keybinds";
-import { CloseIcon, RefreshIcon } from "./icons";
+import { checkOllama } from "../lib/features/triage";
+import { CloseIcon, CpuIcon, RefreshIcon } from "./icons";
+
+type TestState = "idle" | "testing" | "ok" | "fail";
+
+// "Local AI triage" settings: a master toggle plus model/endpoint and a live
+// connection test against the local Ollama daemon.
+function TriageSection({
+  settings,
+  updateSettings,
+}: {
+  settings: Settings;
+  updateSettings: (patch: Partial<Settings>) => void;
+}) {
+  const [test, setTest] = useState<TestState>("idle");
+
+  async function testConnection() {
+    setTest("testing");
+    try {
+      setTest((await checkOllama(settings.triageEndpoint)) ? "ok" : "fail");
+    } catch {
+      setTest("fail");
+    }
+  }
+
+  return (
+    <section className="settings-section">
+      <div className="settings-section-head">
+        <div>
+          <h3>
+            <CpuIcon size={15} /> Local AI triage
+          </h3>
+          <p className="settings-section-sub">
+            Classify and summarize mail with a local Ollama model. Runs on-device — nothing leaves
+            your machine.
+          </p>
+        </div>
+      </div>
+
+      <div className="settings-rows">
+        <div className="settings-row">
+          <div className="settings-row-text">
+            <span className="settings-row-label">Enable triage</span>
+            <span className="settings-row-hint">Requires a running Ollama daemon with the model pulled.</span>
+          </div>
+          <div className="settings-row-control">
+            <label className="toggle">
+              <input
+                type="checkbox"
+                checked={settings.triageEnabled}
+                onChange={(e) => updateSettings({ triageEnabled: e.target.checked })}
+              />
+              <span />
+            </label>
+          </div>
+        </div>
+
+        <div className="settings-row">
+          <div className="settings-row-text">
+            <span className="settings-row-label">Triage on refresh</span>
+            <span className="settings-row-hint">Automatically triage newly-loaded mail.</span>
+          </div>
+          <div className="settings-row-control">
+            <label className="toggle">
+              <input
+                type="checkbox"
+                checked={settings.triageAuto}
+                disabled={!settings.triageEnabled}
+                onChange={(e) => updateSettings({ triageAuto: e.target.checked })}
+              />
+              <span />
+            </label>
+          </div>
+        </div>
+
+        <div className="settings-row">
+          <div className="settings-row-text">
+            <span className="settings-row-label">Sync labels to Gmail</span>
+            <span className="settings-row-hint">
+              Apply category labels to Gmail (synced to web/phone). Off keeps the chips in
+              Augment only.
+            </span>
+          </div>
+          <div className="settings-row-control">
+            <label className="toggle">
+              <input
+                type="checkbox"
+                checked={settings.syncLabelsToGmail}
+                disabled={!settings.triageEnabled}
+                onChange={(e) => updateSettings({ syncLabelsToGmail: e.target.checked })}
+              />
+              <span />
+            </label>
+          </div>
+        </div>
+
+        <div className="settings-row">
+          <div className="settings-row-text">
+            <span className="settings-row-label">Suggested labels</span>
+            <span className="settings-row-hint">
+              Comma-separated hints the AI should prefer reusing (e.g. Recruiters, Invoices).
+            </span>
+          </div>
+          <div className="settings-row-control">
+            <input
+              className="input settings-input"
+              value={settings.suggestedLabels.join(", ")}
+              spellCheck={false}
+              onChange={(e) =>
+                updateSettings({
+                  suggestedLabels: e.target.value
+                    .split(",")
+                    .map((s) => s.trim())
+                    .filter(Boolean),
+                })
+              }
+              placeholder="Recruiters, Invoices, Receipts"
+            />
+          </div>
+        </div>
+
+        <div className="settings-row">
+          <div className="settings-row-text">
+            <span className="settings-row-label">Model</span>
+            <span className="settings-row-hint">A small, fast model is plenty (e.g. qwen2.5:1.5b, gemma2:2b).</span>
+          </div>
+          <div className="settings-row-control">
+            <input
+              className="input settings-input"
+              value={settings.triageModel}
+              spellCheck={false}
+              onChange={(e) => updateSettings({ triageModel: e.target.value })}
+              placeholder="qwen2.5:1.5b"
+            />
+          </div>
+        </div>
+
+        <div className="settings-row">
+          <div className="settings-row-text">
+            <span className="settings-row-label">Assistant model</span>
+            <span className="settings-row-hint">
+              Model for the assistant's chat/agent. Leave blank to reuse the triage model.
+            </span>
+          </div>
+          <div className="settings-row-control">
+            <input
+              className="input settings-input"
+              value={settings.assistantModel}
+              spellCheck={false}
+              onChange={(e) => updateSettings({ assistantModel: e.target.value })}
+              placeholder="(same as triage model)"
+            />
+          </div>
+        </div>
+
+        <div className="settings-row">
+          <div className="settings-row-text">
+            <span className="settings-row-label">Ollama endpoint</span>
+            <span className="settings-row-hint">The local daemon URL.</span>
+          </div>
+          <div className="settings-row-control">
+            <input
+              className="input settings-input"
+              value={settings.triageEndpoint}
+              spellCheck={false}
+              onChange={(e) => {
+                setTest("idle");
+                updateSettings({ triageEndpoint: e.target.value });
+              }}
+              placeholder="http://localhost:11434"
+            />
+          </div>
+        </div>
+
+        <div className="settings-row">
+          <div className="settings-row-text">
+            <span className="settings-row-label">Connection</span>
+            <span className="settings-row-hint">
+              {test === "ok"
+                ? "Connected — Ollama is reachable."
+                : test === "fail"
+                  ? "Couldn't reach Ollama at that endpoint."
+                  : "Check that the daemon is running and reachable."}
+            </span>
+          </div>
+          <div className="settings-row-control">
+            <span className={`triage-status triage-status-${test}`}>
+              {test === "ok" ? "● Connected" : test === "fail" ? "● Offline" : ""}
+            </span>
+            <button className="btn" type="button" disabled={test === "testing"} onClick={() => void testConnection()}>
+              {test === "testing" ? "Testing…" : "Test connection"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
 
 // A button that records the next key combo the user presses. While recording we
 // listen on `window` in the capture phase rather than on the button itself —
@@ -68,8 +265,13 @@ function KeybindCapture({
   );
 }
 
-export function SettingsView() {
-  const { settings, updateSettings } = useAugment();
+export function SettingsView({
+  settings,
+  updateSettings,
+}: {
+  settings: Settings;
+  updateSettings: (patch: Partial<Settings>) => void;
+}) {
   const { keybinds } = settings;
 
   // Assign a shortcut to one action, clearing it from any other action that
@@ -186,6 +388,8 @@ export function SettingsView() {
             </div>
           </div>
         </section>
+
+        <TriageSection settings={settings} updateSettings={updateSettings} />
       </div>
     </div>
   );

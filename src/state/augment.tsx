@@ -19,7 +19,8 @@ import { cancelOAuth, clearStoredSession, refreshAccessToken, startOAuth } from 
 import { Session } from "../lib/auth/session";
 import { GmailClient } from "../lib/gmail/client";
 import { loadLatestMessages, loadThreadRows, type ThreadRow } from "../lib/gmail/inbox";
-import { parseMessage, type ParsedMessage } from "../lib/gmail/parse";
+import { addressLabel, htmlToText, parseMessage, type ParsedMessage } from "../lib/gmail/parse";
+import { searchEngine } from "../lib/search/engine";
 import { runRules } from "../lib/rules/apply";
 import type { Rule } from "../lib/rules/types";
 import {
@@ -42,18 +43,39 @@ import {
 } from "../lib/scheduler/api";
 import {
   DEFAULT_SETTINGS,
+  clearAssistantChat as clearAssistantChatStorage,
+  loadAssistantChat,
   loadFolders,
   loadRules,
   loadSettings,
+  loadSkippedLabels,
+  loadTags,
+  loadTriage,
+  saveAssistantChat,
   saveFolders,
   saveRules,
   saveSettings,
+  saveSkippedLabels,
+  saveTags,
+  saveTriage,
   type Folder,
   type Settings,
 } from "../lib/store";
+import { defaultTagStyle, tagLabelName, type Tag, type TagColor, type TagIconKey } from "../lib/tags";
+import { checkOllama, STARTER_LABELS, triageThread, type TriageResult } from "../lib/features/triage";
+import { defaultSortDir, sortRows, type SortDir, type SortKey } from "../lib/features/view";
+import {
+  NAVIGATION_ACTIONS,
+  runAssist,
+  type AssistantAction,
+  type AssistantMessage,
+  type AssistantMode,
+} from "../lib/features/assistant";
+import { dueAtFromPreset, SNOOZE_PRESETS } from "../lib/time";
+import { broadcastSettings, onSettingsBroadcast } from "../lib/settingsSync";
 
 export type Status = "restoring" | "signedOut" | "authenticating" | "ready" | "error";
-export type View = "inbox" | "snoozed" | "watching" | "rules" | "folder" | "templates" | "settings";
+export type View = "inbox" | "snoozed" | "watching" | "rules" | "folder" | "templates" | "settings" | "tag";
 
 export interface ActivityEntry {
   id: string;
@@ -66,6 +88,13 @@ export interface ReaderState {
   threadId: string;
   loading: boolean;
   messages: ParsedMessage[];
+}
+
+/** A label the AI invented during triage that isn't yet a tag — pending the
+ *  user's approval, with the triaged threads it would apply to. */
+export interface LabelSuggestion {
+  name: string;
+  ids: string[];
 }
 
 export interface AugmentApi {
@@ -87,6 +116,16 @@ export interface AugmentApi {
   /** Title of the list currently in `rows` ("Inbox" or a folder name). */
   listTitle: string;
   inboxLoading: boolean;
+
+  // Client-side ordering of the loaded rows + assistant/UI-driven filtering.
+  sortKey: SortKey;
+  sortDir: SortDir;
+  setSort: (key: SortKey, dir?: SortDir) => void;
+  /** True when the list is showing an ad-hoc filter query (vs. a mailbox). */
+  filterActive: boolean;
+  /** Replace the list with an arbitrary Gmail query (used by the assistant). */
+  applyListQuery: (query: string, title: string) => void;
+  clearFilter: () => void;
   refresh: () => Promise<void>;
   /** Fetch and append the next page of the current list. */
   loadMore: () => Promise<void>;
@@ -137,6 +176,40 @@ export interface AugmentApi {
   deleteTemplate: (id: string) => Promise<void>;
   useTemplate: (template: Template) => Promise<void>;
 
+  // Colored, icon-bearing tags backed by Gmail labels; applied to threads.
+  tags: Tag[];
+  activeTagId: string | null;
+  openTag: (tag: Tag) => void;
+  createTag: (input: { name: string; color: TagColor; icon: TagIconKey }) => Promise<void>;
+  updateTag: (id: string, patch: { name?: string; color?: TagColor; icon?: TagIconKey }) => Promise<void>;
+  deleteTag: (id: string) => void;
+  setThreadTag: (threadId: string, tag: Tag, apply: boolean) => Promise<void>;
+  addTagToThreads: (ids: string[], tag: Tag) => Promise<void>;
+
+  // Local AI triage (Ollama): label + priority + one-line summary per thread.
+  triage: Record<string, TriageResult>;
+  triaging: boolean;
+  runTriageNow: () => Promise<void>;
+
+  // AI-invented labels not yet promoted to tags, awaiting approval.
+  suggestions: LabelSuggestion[];
+  approveSuggestion: (name: string) => Promise<void>;
+  skipSuggestion: (name: string) => void;
+
+  // The right-side assistant panel (hosts label suggestions + chat).
+  assistantOpen: boolean;
+  setAssistantOpen: (open: boolean) => void;
+
+  // Conversational assistant (Ask / Request / Agent confirmation spectrum).
+  assistantMode: AssistantMode;
+  setAssistantMode: (mode: AssistantMode) => void;
+  assistantMessages: AssistantMessage[];
+  assistantBusy: boolean;
+  sendAssistantMessage: (text: string) => Promise<void>;
+  applyProposal: (messageId: string) => Promise<void>;
+  cancelProposal: (messageId: string) => void;
+  clearAssistantChat: () => void;
+
   settings: Settings;
   updateSettings: (patch: Partial<Settings>) => void;
 }
@@ -153,11 +226,81 @@ function makeActivity(text: string, tone: ActivityEntry["tone"]): ActivityEntry 
   return { id: crypto.randomUUID(), ts: Date.now(), text, tone };
 }
 
+/** Action types that operate on a set of emails — these fall back to the current
+ *  selection when the model didn't name explicit ids. */
+const NEEDS_IDS = new Set<AssistantAction["type"]>([
+  "createLabel",
+  "applyLabel",
+  "removeLabel",
+  "archive",
+  "snooze",
+  "markRead",
+  "moveToFolder",
+]);
+
+// Words too generic to identify which email the user means.
+const QUERY_STOPWORDS = new Set([
+  "what", "whats", "did", "does", "do", "want", "wants", "from", "the", "to", "say", "said", "says",
+  "is", "are", "was", "were", "an", "of", "for", "about", "my", "me", "you", "he", "she", "they",
+  "them", "this", "that", "these", "those", "email", "emails", "mail", "mails", "tell", "show",
+  "open", "how", "much", "can", "could", "would", "please", "and", "or", "with", "get", "got",
+  "need", "needs", "who", "when", "where", "why", "have", "has", "any",
+]);
+
+/** Best-effort: which loaded rows does the user's message point at? Scores each
+ *  row by how many message keywords appear in its sender/subject, so "what did
+ *  Veronica say" resolves to Veronica's email and we can deep-read + open it. */
+function matchRelevantRows(message: string, rows: ThreadRow[], limit = 3): string[] {
+  const tokens = (message.toLowerCase().match(/[a-z0-9]+/g) ?? []).filter(
+    (t) => t.length > 2 && !QUERY_STOPWORDS.has(t),
+  );
+  if (tokens.length === 0) return [];
+  return rows
+    .map((row) => {
+      const hay = `${addressLabel(row.from)} ${row.from.email} ${row.subject}`.toLowerCase();
+      const score = tokens.reduce((sum, t) => (hay.includes(t) ? sum + 1 : sum), 0);
+      return { id: row.id, score };
+    })
+    .filter((r) => r.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map((r) => r.id);
+}
+
+/** Trim, drop blanks, and de-duplicate label names case-insensitively while
+ *  keeping the first-seen display casing. */
+function dedupeLabels(names: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of names) {
+    const name = raw.trim();
+    if (!name) continue;
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(name);
+  }
+  return out;
+}
+
 export function AugmentProvider({ children }: { children: ReactNode }): ReactElement {
   const sessionRef = useRef(new Session());
   const settingsRef = useRef<Settings>(DEFAULT_SETTINGS);
   const rulesRef = useRef<Rule[]>([]);
+  const tagsRef = useRef<Tag[]>([]);
+  const triageRef = useRef<Record<string, TriageResult>>({});
+  // Guards against overlapping triage batches (e.g. rapid refreshes).
+  const triagingRef = useRef(false);
+  // Tracks whether we've already warned that Ollama is unreachable, so an
+  // enabled-but-offline setup doesn't warn on every refresh.
+  const triageUnreachableRef = useRef(false);
+  const rowsRef = useRef<ThreadRow[]>([]);
   const handlingRef = useRef<Set<string>>(new Set());
+  // Mirrors read by the long-lived assistant callbacks.
+  const selectedIdsRef = useRef<Set<string>>(new Set());
+  const assistantMessagesRef = useRef<AssistantMessage[]>([]);
+  const assistantModeRef = useRef<AssistantMode>("request");
+  const readerRef = useRef<ReaderState | null>(null);
 
   // Start in "restoring" while we attempt to revive a persisted session; the
   // mount effect below resolves it to "ready" or "signedOut".
@@ -171,6 +314,26 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
 
   const [templates, setTemplates] = useState<Template[]>([]);
   const [templatesLoading, setTemplatesLoading] = useState(false);
+
+  const [tags, setTags] = useState<Tag[]>(() => loadTags());
+  const [activeTagId, setActiveTagId] = useState<string | null>(null);
+
+  const [triage, setTriage] = useState<Record<string, TriageResult>>(() => loadTriage());
+  const [triaging, setTriaging] = useState(false);
+  // Label names the user dismissed from the suggestion list (lower-cased).
+  const [skippedLabels, setSkippedLabels] = useState<string[]>(() => loadSkippedLabels());
+  // Right-side assistant panel open state (shared so the header ✨ can toggle it).
+  const [assistantOpen, setAssistantOpen] = useState(false);
+  // Client-side sort of the loaded rows, and whether an ad-hoc filter is active.
+  const [sortKey, setSortKey] = useState<SortKey>("date");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [filterActive, setFilterActive] = useState(false);
+  // Conversational assistant: mode + chat log (persisted) + in-flight flag.
+  const [assistantMode, setAssistantModeState] = useState<AssistantMode>(() => loadAssistantChat().mode);
+  const [assistantMessages, setAssistantMessages] = useState<AssistantMessage[]>(
+    () => loadAssistantChat().messages,
+  );
+  const [assistantBusy, setAssistantBusy] = useState(false);
 
   const [rows, setRows] = useState<ThreadRow[]>([]);
   const [listTitle, setListTitle] = useState("Inbox");
@@ -197,9 +360,23 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
   const [activity, setActivity] = useState<ActivityEntry[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
 
+  // The rows as displayed: the fetched page(s) reordered by the active sort. All
+  // consumers (rendering + range selection) read this so order stays consistent.
+  const orderedRows = useMemo(
+    () => sortRows(rows, triage, sortKey, sortDir),
+    [rows, triage, sortKey, sortDir],
+  );
+
   // Mirror reactive state into refs the long-lived callbacks/listeners read.
   settingsRef.current = settings;
   rulesRef.current = rules;
+  tagsRef.current = tags;
+  triageRef.current = triage;
+  rowsRef.current = rows;
+  selectedIdsRef.current = selectedIds;
+  assistantMessagesRef.current = assistantMessages;
+  assistantModeRef.current = assistantMode;
+  readerRef.current = reader;
 
   const pushActivity = useCallback((text: string, tone: ActivityEntry["tone"] = "info") => {
     setActivity((prev) => [makeActivity(text, tone), ...prev].slice(0, 60));
@@ -217,6 +394,7 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
     });
   }
   const client = clientRef.current;
+  searchEngine.attachClient(client);
 
   const refreshSchedule = useCallback(async () => {
     try {
@@ -234,6 +412,7 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
       const page = await loadThreadRows(client, listQueryRef.current, 30);
       const next = page.rows;
       setRows(next);
+      searchEngine.indexRows(next); // mirror into the local search index
       nextPageTokenRef.current = page.nextPageToken;
       setHasMore(Boolean(page.nextPageToken));
       // Drop any selected IDs that no longer exist in the refreshed list.
@@ -259,6 +438,7 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
     setLoadingMore(true);
     try {
       const page = await loadThreadRows(client, listQueryRef.current, 30, token);
+      searchEngine.indexRows(page.rows); // mirror into the local search index
       nextPageTokenRef.current = page.nextPageToken;
       setHasMore(Boolean(page.nextPageToken));
       setRows((prev) => {
@@ -305,7 +485,102 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
     if (settingsRef.current.autoApplyRules) {
       await runRulesInternal(true);
     }
+    // Keep the full-text index current via Gmail History (no-op until backfilled).
+    void searchEngine.syncHistory();
   }, [refreshInbox, refreshSchedule, runRulesInternal]);
+
+  // Triage the not-yet-classified rows through the local Ollama model, a few at
+  // a time. Skips quietly when the daemon is unreachable, and the in-flight
+  // guard keeps overlapping refreshes from double-triaging the same thread.
+  const runTriage = useCallback(
+    async (rowsToConsider: ThreadRow[]) => {
+      const current = settingsRef.current;
+      if (!current.triageEnabled) return;
+      const pending = rowsToConsider.filter((row) => !triageRef.current[row.id]);
+      if (pending.length === 0 || triagingRef.current) return;
+
+      triagingRef.current = true;
+      setTriaging(true);
+      try {
+        const reachable = await checkOllama(current.triageEndpoint);
+        if (!reachable) {
+          // Warn only on the transition to "down" — not on every refresh.
+          if (!triageUnreachableRef.current) {
+            pushActivity(`Ollama not reachable at ${current.triageEndpoint} — triage paused`, "warn");
+            triageUnreachableRef.current = true;
+          }
+          return;
+        }
+        triageUnreachableRef.current = false;
+        // Ideas list the model should prefer reusing: the user's existing tags,
+        // the built-in starters, and any hints from settings (deduped, case-insensitive).
+        const ideas = dedupeLabels([
+          ...tagsRef.current.map((t) => t.name),
+          ...STARTER_LABELS,
+          ...current.suggestedLabels,
+        ]);
+        const queue = [...pending];
+        let done = 0;
+        let failed = 0;
+        const worker = async () => {
+          for (let row = queue.shift(); row; row = queue.shift()) {
+            try {
+              const result = await triageThread(row, current.triageModel, current.triageEndpoint, ideas);
+              const next = { ...triageRef.current, [row.id]: result };
+              triageRef.current = next;
+              setTriage(next);
+              saveTriage(next);
+              done += 1;
+              // If the assigned label is already a known tag, apply it to Gmail
+              // now (synced) so the tag chip shows. Brand-new labels instead
+              // surface as suggestions for the user to approve.
+              if (current.syncLabelsToGmail) {
+                const known = tagsRef.current.find(
+                  (t) => t.name.toLowerCase() === result.category.toLowerCase(),
+                );
+                const onRow = rowsRef.current.find((r) => r.id === row.id);
+                if (known && onRow && !onRow.labelIds.includes(known.labelId)) {
+                  try {
+                    await client.modifyThread(row.id, { addLabelIds: [known.labelId] });
+                    setRows((prev) =>
+                      prev.map((r) =>
+                        r.id === row.id
+                          ? { ...r, labelIds: Array.from(new Set([...r.labelIds, known.labelId])) }
+                          : r,
+                      ),
+                    );
+                  } catch {
+                    /* a failed label apply just means the chip waits for a refresh */
+                  }
+                }
+              }
+            } catch {
+              failed += 1;
+            }
+          }
+        };
+        const lanes = Math.min(3, pending.length);
+        await Promise.all(Array.from({ length: lanes }, () => worker()));
+        if (done > 0) pushActivity(`Triaged ${done} ${done === 1 ? "email" : "emails"}`, "success");
+        if (failed > 0) {
+          pushActivity(`Triage failed on ${failed} ${failed === 1 ? "email" : "emails"}`, "warn");
+        }
+      } finally {
+        triagingRef.current = false;
+        setTriaging(false);
+      }
+    },
+    [pushActivity],
+  );
+
+  const runTriageNow = useCallback(() => runTriage(rowsRef.current), [runTriage]);
+
+  // Auto-triage newly-loaded mail when enabled. `runTriage` returns early when
+  // nothing is pending, so this is cheap on unrelated row updates.
+  useEffect(() => {
+    if (!settings.triageEnabled || !settings.triageAuto) return;
+    void runTriage(rows);
+  }, [rows, settings.triageEnabled, settings.triageAuto, runTriage]);
 
   const handleDue = useCallback(
     async (item: ScheduleItem) => {
@@ -341,6 +616,41 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
       unlisten?.();
     };
   }, [status, handleDue]);
+
+  // Tags cache their Gmail label id, but ids differ per account and labels can
+  // be renamed/recreated externally. Re-resolve each by name once we're ready so
+  // row chips keep matching. ensureLabelId shares the folder label cache, so this
+  // is effectively one label list fetch.
+  const resolveTagLabels = useCallback(async () => {
+    if (tagsRef.current.length === 0) return;
+    try {
+      const resolved = await Promise.all(
+        tagsRef.current.map(async (tag) => ({
+          id: tag.id,
+          labelId: await client.ensureLabelId(tagLabelName(tag.name)),
+        })),
+      );
+      setTags((prev) => {
+        let changed = false;
+        const next = prev.map((tag) => {
+          const match = resolved.find((r) => r.id === tag.id);
+          if (match && match.labelId !== tag.labelId) {
+            changed = true;
+            return { ...tag, labelId: match.labelId };
+          }
+          return tag;
+        });
+        if (changed) saveTags(next);
+        return changed ? next : prev;
+      });
+    } catch {
+      // A failed resolve just means chips may not match until the next load.
+    }
+  }, [client]);
+
+  useEffect(() => {
+    if (status === "ready") void resolveTagLabels();
+  }, [status, resolveTagLabels]);
 
   // Each sign-in gets an attempt id; cancelling bumps it so a late resolve or
   // reject from the abandoned flow can't flip the UI back.
@@ -426,6 +736,7 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
     setSelectedIds(new Set());
     setActivity([]);
     setActiveFolderId(null);
+    setActiveTagId(null);
     setListTitle("Inbox");
     listQueryRef.current = "in:inbox";
     setViewState("inbox");
@@ -433,6 +744,13 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
     setHasMore(false);
     setLoadingMore(false);
     setTemplates([]);
+    setFilterActive(false);
+    // Forget the assistant conversation — it's derived from this account's mail.
+    setAssistantOpen(false);
+    setAssistantMessages([]);
+    assistantMessagesRef.current = [];
+    clearAssistantChatStorage();
+    searchEngine.clear(); // don't leave indexed mail on disk after sign-out
   }, [client]);
 
   const removeRow = useCallback(
@@ -492,10 +810,10 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
   // selection. With no valid anchor yet, just selects the clicked row.
   const selectRange = useCallback(
     (id: string) => {
-      const toIndex = rows.findIndex((r) => r.id === id);
+      const toIndex = orderedRows.findIndex((r) => r.id === id);
       if (toIndex === -1) return;
       const anchor = selectionAnchorRef.current;
-      const fromIndex = anchor ? rows.findIndex((r) => r.id === anchor) : -1;
+      const fromIndex = anchor ? orderedRows.findIndex((r) => r.id === anchor) : -1;
       if (fromIndex === -1) {
         selectionAnchorRef.current = id;
         setSelectedIds((prev) => new Set(prev).add(id));
@@ -505,12 +823,17 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
       const hi = Math.max(fromIndex, toIndex);
       setSelectedIds((prev) => {
         const next = new Set(prev);
-        for (let i = lo; i <= hi; i += 1) next.add(rows[i].id);
+        for (let i = lo; i <= hi; i += 1) next.add(orderedRows[i].id);
         return next;
       });
     },
-    [rows],
+    [orderedRows],
   );
+
+  const setSort = useCallback((key: SortKey, dir?: SortDir) => {
+    setSortKey(key);
+    setSortDir(dir ?? defaultSortDir(key));
+  }, []);
 
   const selectAll = useCallback(() => {
     setSelectedIds(new Set(rows.map((r) => r.id)));
@@ -520,6 +843,34 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
     selectionAnchorRef.current = null;
     setSelectedIds(new Set());
   }, []);
+
+  // Replace the list with an arbitrary Gmail query (the assistant's "filter").
+  // Tracked as a filter overlay so the UI can offer a one-click "clear".
+  const applyListQuery = useCallback(
+    (query: string, title: string) => {
+      setActiveFolderId(null);
+      setActiveTagId(null);
+      listQueryRef.current = query;
+      setListTitle(title);
+      setFilterActive(true);
+      clearSelection();
+      closeThread();
+      setViewState("inbox");
+      void refreshInbox();
+    },
+    [clearSelection, closeThread, refreshInbox],
+  );
+
+  const clearFilter = useCallback(() => {
+    setFilterActive(false);
+    setActiveFolderId(null);
+    setActiveTagId(null);
+    listQueryRef.current = "in:inbox";
+    setListTitle("Inbox");
+    clearSelection();
+    setViewState("inbox");
+    void refreshInbox();
+  }, [clearSelection, refreshInbox]);
 
   // Switch the main view. Navigating to the inbox reloads it (rows may still
   // hold a folder's mail); the snoozed/watching/rules panels read their own
@@ -583,6 +934,8 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
     (next: View) => {
       if (next === "inbox") {
         setActiveFolderId(null);
+        setActiveTagId(null);
+        setFilterActive(false);
         listQueryRef.current = "in:inbox";
         setListTitle("Inbox");
         clearSelection();
@@ -591,6 +944,7 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
         return;
       }
       if (next !== "folder") setActiveFolderId(null);
+      if (next !== "tag") setActiveTagId(null);
       if (next === "templates") void refreshTemplates();
       setViewState(next);
     },
@@ -600,6 +954,8 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
   const openFolder = useCallback(
     (folder: Folder) => {
       setActiveFolderId(folder.id);
+      setActiveTagId(null);
+      setFilterActive(false);
       // Gmail search query for the folder's label; JSON.stringify quotes and
       // escapes the name so multi-word labels match.
       listQueryRef.current = `label:${JSON.stringify(folder.name)}`;
@@ -607,6 +963,23 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
       clearSelection();
       closeThread();
       setViewState("folder");
+      void refreshInbox();
+    },
+    [clearSelection, closeThread, refreshInbox],
+  );
+
+  // Filter the list to threads carrying a tag's label (works like opening a
+  // folder, but a tagged thread also stays in its inbox/folder).
+  const openTag = useCallback(
+    (tag: Tag) => {
+      setActiveFolderId(null);
+      setActiveTagId(tag.id);
+      setFilterActive(false);
+      listQueryRef.current = `label:${JSON.stringify(tagLabelName(tag.name))}`;
+      setListTitle(tag.name);
+      clearSelection();
+      closeThread();
+      setViewState("tag");
       void refreshInbox();
     },
     [clearSelection, closeThread, refreshInbox],
@@ -649,6 +1022,70 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
       if (activeFolderId === id) changeView("inbox");
     },
     [activeFolderId, changeView],
+  );
+
+  const persistTags = useCallback((next: Tag[]) => {
+    setTags(next);
+    saveTags(next);
+  }, []);
+
+  const createTag = useCallback(
+    async (input: { name: string; color: TagColor; icon: TagIconKey }) => {
+      const name = input.name.trim();
+      if (!name) return;
+      if (tagsRef.current.some((t) => t.name.toLowerCase() === name.toLowerCase())) {
+        pushActivity(`Tag “${name}” already exists`, "warn");
+        return;
+      }
+      try {
+        // Create the backing Gmail label (idempotent) and remember its id.
+        const labelId = await client.ensureLabelId(tagLabelName(name));
+        const tag: Tag = { id: crypto.randomUUID(), name, labelId, color: input.color, icon: input.icon, source: "user" };
+        persistTags([...tagsRef.current, tag]);
+        pushActivity(`Created tag “${name}”`, "success");
+      } catch (err) {
+        pushActivity(`Could not create tag: ${errorMessage(err)}`, "warn");
+      }
+    },
+    [client, persistTags, pushActivity],
+  );
+
+  const updateTag = useCallback(
+    async (id: string, patch: { name?: string; color?: TagColor; icon?: TagIconKey }) => {
+      const tag = tagsRef.current.find((t) => t.id === id);
+      if (!tag) return;
+      const nextName = patch.name?.trim();
+      try {
+        if (nextName && nextName !== tag.name) {
+          if (tagsRef.current.some((t) => t.id !== id && t.name.toLowerCase() === nextName.toLowerCase())) {
+            pushActivity(`Tag “${nextName}” already exists`, "warn");
+            return;
+          }
+          // Rename the backing Gmail label so the tag keeps its threads.
+          await client.updateLabel(tag.labelId, tagLabelName(nextName));
+        }
+        const next = tagsRef.current.map((t) =>
+          t.id === id ? { ...t, ...patch, name: nextName ?? t.name } : t,
+        );
+        persistTags(next);
+        pushActivity(`Updated tag “${nextName ?? tag.name}”`, "info");
+      } catch (err) {
+        pushActivity(`Could not update tag: ${errorMessage(err)}`, "warn");
+      }
+    },
+    [client, persistTags, pushActivity],
+  );
+
+  // Removes the tag from the app only — the Gmail label and any threads carrying
+  // it are left untouched (matching how folders are removed).
+  const deleteTag = useCallback(
+    (id: string) => {
+      const tag = tagsRef.current.find((t) => t.id === id);
+      persistTags(tagsRef.current.filter((t) => t.id !== id));
+      if (activeTagId === id) changeView("inbox");
+      if (tag) pushActivity(`Deleted tag “${tag.name}”`, "info");
+    },
+    [activeTagId, changeView, persistTags, pushActivity],
   );
 
   const archiveThread = useCallback(
@@ -732,6 +1169,122 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
     [moveThreadsToFolder, selectedIds],
   );
 
+  // Apply (or remove) a tag's label on a single thread, updating the row's
+  // chips optimistically and reverting if Gmail rejects it.
+  const setThreadTag = useCallback(
+    async (threadId: string, tag: Tag, apply: boolean) => {
+      const patchRow = (add: boolean) =>
+        setRows((prev) =>
+          prev.map((r) =>
+            r.id === threadId
+              ? {
+                  ...r,
+                  labelIds: add
+                    ? Array.from(new Set([...r.labelIds, tag.labelId]))
+                    : r.labelIds.filter((l) => l !== tag.labelId),
+                }
+              : r,
+          ),
+        );
+      patchRow(apply);
+      try {
+        await client.modifyThread(threadId, apply ? { addLabelIds: [tag.labelId] } : { removeLabelIds: [tag.labelId] });
+        pushActivity(apply ? `Tagged “${tag.name}”` : `Removed tag “${tag.name}”`, "info");
+      } catch (err) {
+        patchRow(!apply); // revert
+        pushActivity(`Could not update tag: ${errorMessage(err)}`, "warn");
+      }
+    },
+    [client, pushActivity],
+  );
+
+  // Bulk-apply a tag to many threads (used from the multi-select context menu).
+  const addTagToThreads = useCallback(
+    async (ids: string[], tag: Tag) => {
+      if (ids.length === 0) return;
+      setBusy(`Tagging ${ids.length}…`);
+      try {
+        const results = await Promise.allSettled(
+          ids.map((id) => client.modifyThread(id, { addLabelIds: [tag.labelId] })),
+        );
+        let tagged = 0;
+        results.forEach((result, i) => {
+          if (result.status === "fulfilled") {
+            tagged += 1;
+            setRows((prev) =>
+              prev.map((r) =>
+                r.id === ids[i] ? { ...r, labelIds: Array.from(new Set([...r.labelIds, tag.labelId])) } : r,
+              ),
+            );
+          }
+        });
+        if (tagged > 0) pushActivity(`Tagged ${tagged} with “${tag.name}”`, "success");
+        const failed = ids.length - tagged;
+        if (failed > 0) pushActivity(`${failed} ${failed === 1 ? "thread" : "threads"} failed to tag`, "warn");
+      } finally {
+        setBusy(null);
+      }
+    },
+    [client, pushActivity],
+  );
+
+  // Labels the AI invented that aren't tags yet (and weren't dismissed), grouped
+  // with the threads they'd apply to. Pure derivation of triage + tags + skips.
+  const suggestions = useMemo<LabelSuggestion[]>(() => {
+    const known = new Set(tags.map((t) => t.name.toLowerCase()));
+    const skipped = new Set(skippedLabels);
+    const groups = new Map<string, LabelSuggestion>();
+    for (const [id, result] of Object.entries(triage)) {
+      const name = result.category;
+      if (!name) continue;
+      const key = name.toLowerCase();
+      // "Other" is the model's fallback for unclassifiable mail — not a label
+      // worth proposing.
+      if (key === "other" || known.has(key) || skipped.has(key)) continue;
+      const group = groups.get(key);
+      if (group) group.ids.push(id);
+      else groups.set(key, { name, ids: [id] });
+    }
+    return [...groups.values()].sort((a, b) => b.ids.length - a.ids.length);
+  }, [triage, tags, skippedLabels]);
+
+  // Promote a suggested label to a real (auto-origin) tag and apply it to every
+  // thread triaged under it. Approval is explicit, so it always writes to Gmail
+  // regardless of the auto-sync setting. Once it's a tag, it leaves `suggestions`.
+  const approveSuggestion = useCallback(
+    async (name: string) => {
+      const key = name.toLowerCase();
+      const ids = Object.entries(triageRef.current)
+        .filter(([, r]) => r.category.toLowerCase() === key)
+        .map(([id]) => id);
+      try {
+        let tag = tagsRef.current.find((t) => t.name.toLowerCase() === key);
+        if (!tag) {
+          const style = defaultTagStyle(name);
+          const labelId = await client.ensureLabelId(tagLabelName(name));
+          tag = { id: crypto.randomUUID(), name, labelId, color: style.color, icon: style.icon, source: "auto" };
+          persistTags([...tagsRef.current, tag]);
+          pushActivity(`Created label “${name}”`, "success");
+        }
+        if (ids.length > 0) await addTagToThreads(ids, tag);
+      } catch (err) {
+        pushActivity(`Could not approve “${name}”: ${errorMessage(err)}`, "warn");
+      }
+    },
+    [client, persistTags, pushActivity, addTagToThreads],
+  );
+
+  // Dismiss a suggested label so triage stops proposing it (persisted).
+  const skipSuggestion = useCallback((name: string) => {
+    const key = name.toLowerCase();
+    setSkippedLabels((prev) => {
+      if (prev.includes(key)) return prev;
+      const next = [...prev, key];
+      saveSkippedLabels(next);
+      return next;
+    });
+  }, []);
+
   const markRead = useCallback(
     async (id: string) => {
       try {
@@ -803,6 +1356,368 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
     [pushActivity],
   );
 
+  // ---- Conversational assistant -----------------------------------------
+
+  // setState + persist in one move, always saving with the current mode.
+  const commitMessages = useCallback(
+    (updater: (prev: AssistantMessage[]) => AssistantMessage[]) => {
+      setAssistantMessages((prev) => {
+        const next = updater(prev);
+        assistantMessagesRef.current = next;
+        saveAssistantChat({ mode: assistantModeRef.current, messages: next });
+        return next;
+      });
+    },
+    [],
+  );
+
+  const setAssistantMode = useCallback((mode: AssistantMode) => {
+    assistantModeRef.current = mode;
+    setAssistantModeState(mode);
+    saveAssistantChat({ mode, messages: assistantMessagesRef.current });
+  }, []);
+
+  const clearAssistantChat = useCallback(() => {
+    assistantMessagesRef.current = [];
+    setAssistantMessages([]);
+    clearAssistantChatStorage();
+  }, []);
+
+  // Find or create a tag by name (auto origin) so the assistant can apply it.
+  const ensureTag = useCallback(
+    async (name: string): Promise<Tag> => {
+      const existing = tagsRef.current.find((t) => t.name.toLowerCase() === name.toLowerCase());
+      if (existing) return existing;
+      const style = defaultTagStyle(name);
+      const labelId = await client.ensureLabelId(tagLabelName(name));
+      const tag: Tag = {
+        id: crypto.randomUUID(),
+        name,
+        labelId,
+        color: style.color,
+        icon: style.icon,
+        source: "auto",
+      };
+      persistTags([...tagsRef.current, tag]);
+      return tag;
+    },
+    [client, persistTags],
+  );
+
+  // Find or create a sidebar folder by name.
+  const ensureFolder = useCallback(
+    async (name: string): Promise<Folder> => {
+      const existing = folders.find((f) => f.name.toLowerCase() === name.toLowerCase());
+      if (existing) return existing;
+      await client.ensureLabelId(name);
+      const folder: Folder = { id: crypto.randomUUID(), name };
+      setFolders((prev) => {
+        const next = [...prev, folder];
+        saveFolders(next);
+        return next;
+      });
+      return folder;
+    },
+    [client, folders],
+  );
+
+  // Carry out a single assistant action, returning a one-line log of the result.
+  const runAction = useCallback(
+    async (action: AssistantAction): Promise<string> => {
+      // Target: explicit ids → current selection → the open email ("this mail").
+      const ids =
+        action.ids && action.ids.length > 0
+          ? action.ids
+          : selectedIdsRef.current.size > 0
+            ? [...selectedIdsRef.current]
+            : readerRef.current?.threadId
+              ? [readerRef.current.threadId]
+              : [];
+      const count = (n: number) => `${n} ${n === 1 ? "email" : "emails"}`;
+      switch (action.type) {
+        case "createLabel":
+        case "applyLabel": {
+          if (!action.label) return "";
+          const tag = await ensureTag(action.label);
+          if (ids.length > 0) await addTagToThreads(ids, tag);
+          return `Applied “${tag.name}” to ${count(ids.length)}`;
+        }
+        case "removeLabel": {
+          if (!action.label) return "";
+          const tag = tagsRef.current.find((t) => t.name.toLowerCase() === action.label!.toLowerCase());
+          if (!tag) return `No label “${action.label}” to remove`;
+          for (const id of ids) await setThreadTag(id, tag, false);
+          return `Removed “${tag.name}” from ${count(ids.length)}`;
+        }
+        case "archive": {
+          await Promise.allSettled(
+            ids.map((id) => client.archiveThread(id).then(() => removeRow(id))),
+          );
+          return `Archived ${count(ids.length)}`;
+        }
+        case "markRead": {
+          await Promise.allSettled(ids.map((id) => markRead(id)));
+          return `Marked ${count(ids.length)} read`;
+        }
+        case "snooze": {
+          const preset =
+            SNOOZE_PRESETS.find(
+              (p) => p.label.toLowerCase() === (action.snoozePreset ?? "").toLowerCase(),
+            ) ?? SNOOZE_PRESETS[0];
+          const dueAt = dueAtFromPreset(preset);
+          for (const id of ids) {
+            const row = rowsRef.current.find((r) => r.id === id);
+            await snooze(id, row?.subject ?? "(no subject)", dueAt);
+          }
+          return `Snoozed ${count(ids.length)} (${preset.label})`;
+        }
+        case "moveToFolder": {
+          if (!action.folder) return "";
+          const folder = await ensureFolder(action.folder);
+          await moveThreadsToFolder(ids, folder);
+          return `Moved ${count(ids.length)} to “${folder.name}”`;
+        }
+        case "openThread": {
+          const id = action.ids?.[0] ?? [...selectedIdsRef.current][0];
+          if (!id) return "No email to open";
+          await openThread(id);
+          const row = rowsRef.current.find((r) => r.id === id);
+          return row ? `Opened “${row.subject || "(no subject)"}”` : "Opened the email";
+        }
+        case "setSort": {
+          setSort(action.sortKey ?? "date", action.sortDir);
+          return `Sorted by ${action.sortKey ?? "date"}`;
+        }
+        case "setFilter": {
+          const parts: string[] = [];
+          if (action.query) parts.push(action.query);
+          if (action.label) {
+            const tag = tagsRef.current.find((t) => t.name.toLowerCase() === action.label!.toLowerCase());
+            parts.push(`label:${JSON.stringify(tag ? tagLabelName(tag.name) : action.label)}`);
+          }
+          if (action.from) parts.push(`from:${action.from}`);
+          if (action.unread) parts.push("is:unread");
+          const query = parts.join(" ").trim() || "in:inbox";
+          const title = action.filterTitle ?? action.label ?? action.from ?? "Filtered";
+          applyListQuery(query, title);
+          return `Filtered: ${title}`;
+        }
+        case "answer":
+        default:
+          return "";
+      }
+    },
+    [
+      ensureTag,
+      ensureFolder,
+      addTagToThreads,
+      setThreadTag,
+      client,
+      removeRow,
+      markRead,
+      snooze,
+      moveThreadsToFolder,
+      openThread,
+      setSort,
+      applyListQuery,
+    ],
+  );
+
+  const executeActions = useCallback(
+    async (actions: AssistantAction[]): Promise<void> => {
+      for (const action of actions) {
+        try {
+          const log = await runAction(action);
+          if (log) pushActivity(log, "success");
+        } catch (err) {
+          pushActivity(`Assistant action failed: ${errorMessage(err)}`, "warn");
+        }
+      }
+    },
+    [runAction, pushActivity],
+  );
+
+  // Model-facing snapshot of the mail in view. A compact list (id + sender +
+  // subject + snippet + triage summary) for everything loaded, PLUS the full body
+  // text of the open thread and any selected threads — so questions about
+  // amounts/details ("how much did I pay?") can actually be answered.
+  const buildAssistantContext = useCallback(async (relevantIds: string[] = []): Promise<string> => {
+    const selected = selectedIdsRef.current;
+    const open = readerRef.current;
+    const visible = rowsRef.current.slice(0, 40);
+    const lines = visible.map((row) => {
+      const t = triageRef.current[row.id];
+      const flags = `${selected.has(row.id) ? "*" : ""}${open?.threadId === row.id ? ">" : ""}` || "-";
+      const summary = t?.summary ? ` — ${t.summary}` : "";
+      const snippet = row.snippet ? ` — ${row.snippet.slice(0, 100)}` : "";
+      return `${flags} [${row.id}] ${addressLabel(row.from)} | ${row.subject || "(no subject)"}${summary}${snippet}`;
+    });
+
+    // Deep read: the open thread, the emails the message points at, then any
+    // selected threads (capped, deduped) — so the model can actually summarize.
+    const detailIds: string[] = [];
+    const addDetail = (id: string | undefined) => {
+      if (id && detailIds.length < 5 && !detailIds.includes(id)) detailIds.push(id);
+    };
+    addDetail(open?.threadId);
+    for (const id of relevantIds) addDetail(id);
+    for (const id of selected) addDetail(id);
+    const bodyText = async (id: string): Promise<string> => {
+      if (open && open.threadId === id && open.messages.length > 0) {
+        return open.messages.map((m) => m.text ?? (m.html ? htmlToText(m.html) : "")).join("\n");
+      }
+      try {
+        const thread = await client.getThread(id);
+        return (thread.messages ?? [])
+          .map(parseMessage)
+          .map((m) => m.text ?? (m.html ? htmlToText(m.html) : ""))
+          .join("\n");
+      } catch {
+        return "";
+      }
+    };
+    const details = await Promise.all(
+      detailIds.map(async (id) => {
+        const row = rowsRef.current.find((r) => r.id === id);
+        const head = row ? `${addressLabel(row.from)} | ${row.subject || "(no subject)"}` : id;
+        const text = (await bodyText(id)).replace(/\n{3,}/g, "\n\n").trim().slice(0, 1500);
+        return `[${id}] ${head}\n${text || "(no readable text)"}`;
+      }),
+    );
+
+    return [
+      `Emails (* = selected, > = open; ${selected.size} selected of ${visible.length} shown):`,
+      lines.join("\n") || "(no emails loaded)",
+      details.length ? `\nFull content of the open/selected emails:\n${details.join("\n\n")}` : "",
+      ``,
+      `Existing labels: ${tagsRef.current.map((t) => t.name).join(", ") || "(none)"}`,
+      `Folders: ${folders.map((f) => f.name).join(", ") || "(none)"}`,
+      `Snooze presets: ${SNOOZE_PRESETS.map((p) => p.label).join(", ")}`,
+      `Current sort: ${sortKey} ${sortDir}`,
+    ].join("\n");
+  }, [client, folders, sortKey, sortDir]);
+
+  const sendAssistantMessage = useCallback(
+    async (text: string): Promise<void> => {
+      const message = text.trim();
+      if (!message || assistantBusy) return;
+      const current = settingsRef.current;
+      const model = current.assistantModel.trim() || current.triageModel;
+      // Capture prior turns BEFORE appending this one, so the current message is
+      // only sent as the request (not duplicated in history).
+      const mode = assistantModeRef.current;
+      // Which loaded emails does this message point at? Used both to deep-read
+      // them (so the model can summarize) and to auto-open the top match.
+      const relevantIds = matchRelevantRows(message, rowsRef.current.slice(0, 40));
+      const history = assistantMessagesRef.current
+        .slice(-10)
+        .map((m) => ({ role: m.role, content: m.content }));
+      const userMsg: AssistantMessage = {
+        id: crypto.randomUUID(),
+        role: "user",
+        content: message,
+        ts: Date.now(),
+      };
+      commitMessages((prev) => [...prev, userMsg]);
+      setAssistantBusy(true);
+      try {
+        const output = await runAssist({
+          model,
+          endpoint: current.triageEndpoint,
+          mode,
+          message,
+          history,
+          context: await buildAssistantContext(relevantIds),
+        });
+        // Target fallback for actions that didn't name ids: current selection,
+        // else the open email ("this mail"), else the best keyword match.
+        const fallbackIds =
+          selectedIdsRef.current.size > 0
+            ? [...selectedIdsRef.current]
+            : readerRef.current?.threadId
+              ? [readerRef.current.threadId]
+              : relevantIds.slice(0, 1);
+        const resolved = (output.actions ?? []).map((action) =>
+          NEEDS_IDS.has(action.type) && !(action.ids && action.ids.length > 0)
+            ? { ...action, ids: fallbackIds }
+            : action,
+        );
+        // Navigation (open / sort / filter) is non-destructive — run it now in
+        // every mode. Mail-changing actions are blocked in Ask, proposed in
+        // Request, executed in Agent.
+        const nav = resolved.filter((a) => NAVIGATION_ACTIONS.has(a.type));
+        const mutating = resolved.filter((a) => !NAVIGATION_ACTIONS.has(a.type));
+        // If the message clearly points at an email and the model didn't open one
+        // itself, open the top match for the user (open it, don't tell them to).
+        const topMatch = relevantIds[0];
+        if (
+          topMatch &&
+          topMatch !== readerRef.current?.threadId &&
+          !resolved.some((a) => a.type === "openThread")
+        ) {
+          nav.push({ type: "openThread", ids: [topMatch] });
+        }
+        if (nav.length > 0) await executeActions(nav);
+        const pending = mode === "ask" ? [] : mutating;
+        const reply =
+          output.reply?.trim() || (pending.length || nav.length ? "Done." : "…");
+        if (mode === "agent" && pending.length > 0) {
+          await executeActions(pending);
+          commitMessages((prev) => [
+            ...prev,
+            { id: crypto.randomUUID(), role: "assistant", content: reply, ts: Date.now(), actions: pending, status: "applied" },
+          ]);
+        } else {
+          commitMessages((prev) => [
+            ...prev,
+            {
+              id: crypto.randomUUID(),
+              role: "assistant",
+              content: reply,
+              ts: Date.now(),
+              actions: pending.length ? pending : undefined,
+              status: pending.length ? "proposed" : undefined,
+            },
+          ]);
+        }
+      } catch (err) {
+        commitMessages((prev) => [
+          ...prev,
+          {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: `Sorry — I couldn't reach the model. ${errorMessage(err)}`,
+            ts: Date.now(),
+          },
+        ]);
+      } finally {
+        setAssistantBusy(false);
+      }
+    },
+    [assistantBusy, buildAssistantContext, commitMessages, executeActions],
+  );
+
+  const applyProposal = useCallback(
+    async (messageId: string): Promise<void> => {
+      const msg = assistantMessagesRef.current.find((m) => m.id === messageId);
+      if (!msg?.actions || msg.status !== "proposed") return;
+      await executeActions(msg.actions);
+      commitMessages((prev) =>
+        prev.map((m) => (m.id === messageId ? { ...m, status: "applied" } : m)),
+      );
+    },
+    [executeActions, commitMessages],
+  );
+
+  const cancelProposal = useCallback(
+    (messageId: string): void => {
+      commitMessages((prev) =>
+        prev.map((m) => (m.id === messageId ? { ...m, status: "cancelled" } : m)),
+      );
+    },
+    [commitMessages],
+  );
+
   const runRulesNow = useCallback(() => runRulesInternal(false), [runRulesInternal]);
 
   const persistRules = useCallback((next: Rule[]) => {
@@ -838,11 +1753,30 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
   );
 
   const updateSettings = useCallback((patch: Partial<Settings>) => {
-    setSettings((prev) => {
-      const next = { ...prev, ...patch };
-      saveSettings(next);
-      return next;
+    const next = { ...settingsRef.current, ...patch };
+    settingsRef.current = next;
+    setSettings(next);
+    saveSettings(next);
+    // Mirror the change into the dedicated settings window (and vice-versa).
+    broadcastSettings(next);
+  }, []);
+
+  // Apply settings changed in the dedicated settings window. Applying an
+  // incoming value doesn't re-broadcast, so there's no echo loop.
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let active = true;
+    void onSettingsBroadcast((incoming) => {
+      settingsRef.current = incoming;
+      setSettings(incoming);
+    }).then((fn) => {
+      if (active) unlisten = fn;
+      else fn();
     });
+    return () => {
+      active = false;
+      unlisten?.();
+    };
   }, []);
 
   const value = useMemo<AugmentApi>(
@@ -857,9 +1791,15 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
       createFolder,
       removeFolder,
       openFolder,
-      rows,
+      rows: orderedRows,
       listTitle,
       inboxLoading,
+      sortKey,
+      sortDir,
+      setSort,
+      filterActive,
+      applyListQuery,
+      clearFilter,
       refresh,
       loadMore,
       hasMore,
@@ -899,6 +1839,30 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
       saveTemplate,
       deleteTemplate,
       useTemplate,
+      tags,
+      activeTagId,
+      openTag,
+      createTag,
+      updateTag,
+      deleteTag,
+      setThreadTag,
+      addTagToThreads,
+      triage,
+      triaging,
+      runTriageNow,
+      suggestions,
+      approveSuggestion,
+      skipSuggestion,
+      assistantOpen,
+      setAssistantOpen,
+      assistantMode,
+      setAssistantMode,
+      assistantMessages,
+      assistantBusy,
+      sendAssistantMessage,
+      applyProposal,
+      cancelProposal,
+      clearAssistantChat,
       settings,
       updateSettings,
     }),
@@ -913,9 +1877,15 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
       createFolder,
       removeFolder,
       openFolder,
-      rows,
+      orderedRows,
       listTitle,
       inboxLoading,
+      sortKey,
+      sortDir,
+      setSort,
+      filterActive,
+      applyListQuery,
+      clearFilter,
       refresh,
       loadMore,
       hasMore,
@@ -955,6 +1925,29 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
       saveTemplate,
       deleteTemplate,
       useTemplate,
+      tags,
+      activeTagId,
+      openTag,
+      createTag,
+      updateTag,
+      deleteTag,
+      setThreadTag,
+      addTagToThreads,
+      triage,
+      triaging,
+      runTriageNow,
+      suggestions,
+      approveSuggestion,
+      skipSuggestion,
+      assistantOpen,
+      assistantMode,
+      setAssistantMode,
+      assistantMessages,
+      assistantBusy,
+      sendAssistantMessage,
+      applyProposal,
+      cancelProposal,
+      clearAssistantChat,
       settings,
       updateSettings,
     ],

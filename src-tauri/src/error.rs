@@ -44,6 +44,9 @@ pub enum AppError {
     #[error("notification failed: {0}")]
     Notification(String),
 
+    #[error("local Ollama error: {0}")]
+    Ollama(String),
+
     #[error("internal error: {0}")]
     Internal(String),
 }

@@ -20,10 +20,13 @@ use crate::error::{AppError, AppResult};
 
 const AUTH_ENDPOINT: &str = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN_ENDPOINT: &str = "https://oauth2.googleapis.com/token";
-/// `gmail.modify` is the least-privileged scope that still allows reading mail,
-/// adding/removing labels, and archiving (removing the INBOX label). It does NOT
-/// permit permanent deletion or sending — those stay off-limits by construction.
-const SCOPE: &str = "https://www.googleapis.com/auth/gmail.modify";
+/// `gmail.modify` allows reading mail, adding/removing labels, archiving, and
+/// moving to Trash. `gmail.send` adds the ability to send mail (for the in-app
+/// composer + Quick Actions). Permanent deletion stays off-limits by construction.
+/// NOTE: broadening this past a previously-granted scope forces a one-time
+/// re-consent — existing users must sign in again before sending works.
+const SCOPE: &str =
+    "https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.send";
 /// Bound so a forgotten browser tab cannot wedge the flow forever.
 const REDIRECT_TIMEOUT: Duration = Duration::from_secs(300);
 

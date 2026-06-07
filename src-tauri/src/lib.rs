@@ -5,7 +5,9 @@
 //! in the TypeScript layer. See `oauth.rs` and `scheduler.rs`.
 
 mod error;
+mod menu;
 mod oauth;
+mod ollama;
 mod scheduler;
 mod secrets;
 
@@ -14,7 +16,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use tauri::{Manager, State};
+use tauri::{AppHandle, Manager, State};
 
 use error::AppError;
 
@@ -48,6 +50,13 @@ async fn refresh_access_token(state: State<'_, AppState>) -> Result<oauth::Oauth
     oauth::run_refresh(&state.http, &state.refresh_token, &state.creds).await
 }
 
+/// Open (or focus) the dedicated Settings window — same effect as the app
+/// menu's "Settings…" item, exposed so the in-app button can trigger it too.
+#[tauri::command]
+fn open_settings_window(app: AppHandle) {
+    menu::open_settings(&app);
+}
+
 /// Sign out: drop the in-memory refresh token and erase the persisted one so a
 /// later launch starts signed out.
 #[tauri::command]
@@ -77,6 +86,12 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
+        .menu(|handle| menu::build(handle))
+        .on_menu_event(|app, event| {
+            if event.id().as_ref() == menu::SETTINGS_MENU_ID {
+                menu::open_settings(app);
+            }
+        })
         .setup(|app| {
             let handle = app.handle();
             let store_path = scheduler::store_path(handle)?;
@@ -110,10 +125,14 @@ pub fn run() {
             cancel_oauth,
             refresh_access_token,
             clear_session,
+            open_settings_window,
             scheduler::schedule_list,
             scheduler::schedule_add,
             scheduler::schedule_remove,
             scheduler::notify,
+            ollama::ollama_triage,
+            ollama::ollama_health,
+            ollama::ollama_assist,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Augment");

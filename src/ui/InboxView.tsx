@@ -6,16 +6,22 @@ import type { ThreadRow } from "../lib/gmail/inbox";
 import type { Folder } from "../lib/store";
 import { ThreadReader } from "./ThreadReader";
 import { ContextMenu, type MenuNode } from "./ContextMenu";
+import { TagChip, TagGlyph } from "./tags";
+import { CategoryChip, PriorityPill } from "./triage";
 import { useClickOutside } from "./hooks";
+import { SORT_OPTIONS, type SortKey } from "../lib/features/view";
 import {
   ArchiveIcon,
   CheckIcon,
   ClockIcon,
+  CloseIcon,
   ExternalIcon,
   EyeIcon,
   FolderIcon,
   MailIcon,
   RefreshIcon,
+  SparkleIcon,
+  TagIcon,
 } from "./icons";
 
 // Dropdown in the selection toolbar that files the selected threads into a
@@ -65,6 +71,11 @@ export function InboxView() {
     listTitle,
     view,
     inboxLoading,
+    sortKey,
+    sortDir,
+    setSort,
+    filterActive,
+    clearFilter,
     selectedId,
     openThread,
     refresh,
@@ -85,6 +96,13 @@ export function InboxView() {
     moveSelectedToFolder,
     moveThreadsToFolder,
     folders,
+    tags,
+    setThreadTag,
+    addTagToThreads,
+    triage,
+    suggestions,
+    assistantOpen,
+    setAssistantOpen,
     busy,
   } = useAugment();
 
@@ -124,6 +142,20 @@ export function InboxView() {
           label: `Move ${n} to folder`,
           icon: <FolderIcon size={15} />,
           items: folderTargets((folder) => void moveSelectedToFolder(folder)),
+        },
+        {
+          kind: "submenu",
+          label: `Tag ${n}`,
+          icon: <TagIcon size={15} />,
+          items:
+            tags.length === 0
+              ? [{ kind: "item", label: "No tags yet", disabled: true, onSelect: () => {} }]
+              : tags.map((tag) => ({
+                  kind: "item",
+                  label: tag.name,
+                  icon: <TagGlyph color={tag.color} icon={tag.icon} size={15} />,
+                  onSelect: () => void addTagToThreads([...selectedIds], tag),
+                })),
         },
         { kind: "separator" },
         { kind: "item", label: "Clear selection", onSelect: clearSelection },
@@ -165,6 +197,23 @@ export function InboxView() {
         icon: <FolderIcon size={15} />,
         items: folderTargets((folder) => void moveThreadsToFolder([row.id], folder)),
       },
+      {
+        kind: "submenu",
+        label: "Tag",
+        icon: <TagIcon size={15} />,
+        items:
+          tags.length === 0
+            ? [{ kind: "item", label: "No tags yet", disabled: true, onSelect: () => {} }]
+            : tags.map((tag) => {
+                const applied = row.labelIds.includes(tag.labelId);
+                return {
+                  kind: "item",
+                  label: `${applied ? "✓ " : ""}${tag.name}`,
+                  icon: <TagGlyph color={tag.color} icon={tag.icon} size={15} />,
+                  onSelect: () => void setThreadTag(row.id, tag, !applied),
+                };
+              }),
+      },
       { kind: "separator" },
       { kind: "item", label: "Open in Gmail", icon: <ExternalIcon size={15} />, onSelect: () => void openInGmail(row.id) },
     );
@@ -198,16 +247,61 @@ export function InboxView() {
     <div className="inbox">
       <div className="list">
         <div className="list-head">
-          <h2>{listTitle}</h2>
-          <button
-            className="icon-btn"
-            onClick={() => void refresh()}
-            disabled={inboxLoading}
-            title="Refresh"
-            type="button"
-          >
-            <RefreshIcon size={16} className={inboxLoading ? "spin" : undefined} />
-          </button>
+          <div className="list-head-title">
+            <h2>{listTitle}</h2>
+            {filterActive && (
+              <button
+                className="filter-clear"
+                type="button"
+                onClick={clearFilter}
+                title="Clear filter"
+              >
+                <CloseIcon size={12} /> Clear filter
+              </button>
+            )}
+          </div>
+          <div className="list-head-actions">
+            <select
+              className="select sort-select"
+              value={sortKey}
+              title="Sort"
+              onChange={(event) => setSort(event.target.value as SortKey)}
+            >
+              {SORT_OPTIONS.map((option) => (
+                <option key={option.key} value={option.key}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <button
+              className="icon-btn sort-dir"
+              type="button"
+              title={sortDir === "asc" ? "Ascending" : "Descending"}
+              onClick={() => setSort(sortKey, sortDir === "asc" ? "desc" : "asc")}
+            >
+              {sortDir === "asc" ? "↑" : "↓"}
+            </button>
+            <button
+              className={`icon-btn assistant-toggle ${assistantOpen ? "is-active" : ""}`}
+              onClick={() => setAssistantOpen(!assistantOpen)}
+              title="Assistant"
+              type="button"
+            >
+              <SparkleIcon size={16} />
+              {suggestions.length > 0 && (
+                <span className="assistant-badge">{suggestions.length}</span>
+              )}
+            </button>
+            <button
+              className="icon-btn"
+              onClick={() => void refresh()}
+              disabled={inboxLoading}
+              title="Refresh"
+              type="button"
+            >
+              <RefreshIcon size={16} className={inboxLoading ? "spin" : undefined} />
+            </button>
+          </div>
         </div>
 
         {selectedIds.size > 0 && (
@@ -235,42 +329,75 @@ export function InboxView() {
           {rows.length === 0 && inboxLoading && <div className="list-empty">Loading…</div>}
           {rows.length === 0 && !inboxLoading && (
             <div className="list-empty">
-              {view === "folder" ? "This folder is empty." : "Inbox zero. 🎉"}
+              {view === "folder"
+                ? "This folder is empty."
+                : view === "tag"
+                  ? "Nothing tagged here yet."
+                  : "Inbox zero. 🎉"}
             </div>
           )}
 
-          {rows.map((row) => (
-            <button
-              key={row.id}
-              type="button"
-              className={`row ${row.id === selectedId ? "row-active" : ""} ${
-                selectedIds.has(row.id) ? "row-selected" : ""
-              } ${row.unread ? "row-unread" : ""}`}
-              onClick={(event) => {
-                if (event.shiftKey) {
-                  selectRange(row.id);
-                  return;
-                }
-                if (event.metaKey || event.ctrlKey) {
-                  toggleSelected(row.id);
-                  return;
-                }
-                void openThread(row.id);
-              }}
-              onContextMenu={(event) => onRowContextMenu(event, row)}
-            >
-              <div className="row-top">
-                <span className="row-from">{addressLabel(row.from)}</span>
-                <span className="row-date">{formatListDate(row.date)}</span>
-              </div>
-              <div className="row-subject">
-                {row.unread && <span className="row-dot" aria-label="unread" />}
-                {row.subject}
-                {row.messageCount > 1 && <span className="row-count">{row.messageCount}</span>}
-              </div>
-              <div className="row-snippet">{row.snippet}</div>
-            </button>
-          ))}
+          {rows.map((row) => {
+            const rowTags = tags.filter((t) => row.labelIds.includes(t.labelId));
+            const rowTriage = triage[row.id];
+            const catName = rowTriage?.category;
+            const catTag = catName
+              ? tags.find((t) => t.name.toLowerCase() === catName.toLowerCase())
+              : undefined;
+            // Show the AI's label as a chip unless it's the "Other" fallback or
+            // already applied as a tag (the real TagChip below covers that case).
+            const showCat =
+              Boolean(catName) &&
+              catName!.toLowerCase() !== "other" &&
+              !(catTag && row.labelIds.includes(catTag.labelId));
+            return (
+              <button
+                key={row.id}
+                type="button"
+                className={`row ${row.id === selectedId ? "row-active" : ""} ${
+                  selectedIds.has(row.id) ? "row-selected" : ""
+                } ${row.unread ? "row-unread" : ""}`}
+                onClick={(event) => {
+                  if (event.shiftKey) {
+                    selectRange(row.id);
+                    return;
+                  }
+                  if (event.metaKey || event.ctrlKey) {
+                    toggleSelected(row.id);
+                    return;
+                  }
+                  void openThread(row.id);
+                }}
+                onContextMenu={(event) => onRowContextMenu(event, row)}
+              >
+                <div className="row-top">
+                  <span className="row-from">{addressLabel(row.from)}</span>
+                  <span className="row-date">{formatListDate(row.date)}</span>
+                </div>
+                <div className="row-subject">
+                  {row.unread && <span className="row-dot" aria-label="unread" />}
+                  {row.subject}
+                  {row.messageCount > 1 && <span className="row-count">{row.messageCount}</span>}
+                </div>
+                <div className="row-snippet">{row.snippet}</div>
+                {rowTriage?.summary && (
+                  <div className="row-summary">
+                    <SparkleIcon size={12} />
+                    <span>{rowTriage.summary}</span>
+                  </div>
+                )}
+                {(rowTriage || rowTags.length > 0) && (
+                  <div className="row-tags">
+                    {showCat && catName && <CategoryChip name={catName} tag={catTag} />}
+                    {rowTriage && <PriorityPill priority={rowTriage.priority} />}
+                    {rowTags.map((tag) => (
+                      <TagChip key={tag.id} tag={tag} />
+                    ))}
+                  </div>
+                )}
+              </button>
+            );
+          })}
 
           {loadingMore && <div className="list-more">Loading more…</div>}
           {hasMore && !loadingMore && (
