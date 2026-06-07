@@ -46,6 +46,7 @@ import {
   clearAssistantChat as clearAssistantChatStorage,
   loadAssistantChat,
   loadFolders,
+  loadQuickActions,
   loadRules,
   loadSettings,
   loadSkippedLabels,
@@ -53,6 +54,7 @@ import {
   loadTriage,
   saveAssistantChat,
   saveFolders,
+  saveQuickActions,
   saveRules,
   saveSettings,
   saveSkippedLabels,
@@ -62,6 +64,7 @@ import {
   type Settings,
 } from "../lib/store";
 import { defaultTagStyle, tagLabelName, type Tag, type TagColor, type TagIconKey } from "../lib/tags";
+import { isComposeStep, type QuickAction, type QuickStep } from "../lib/quickActions";
 import { checkOllama, STARTER_LABELS, triageThread, type TriageResult } from "../lib/features/triage";
 import { defaultSortDir, sortRows, type SortDir, type SortKey } from "../lib/features/view";
 import {
@@ -72,10 +75,27 @@ import {
   type AssistantMode,
 } from "../lib/features/assistant";
 import { dueAtFromPreset, SNOOZE_PRESETS } from "../lib/time";
+import {
+  blankDraft,
+  draftFromMessage,
+  saveDraft as saveDraftToGmail,
+  sendDraft,
+  type ComposeDraft,
+  type ComposeMode,
+} from "../lib/features/compose";
 import { broadcastSettings, onSettingsBroadcast } from "../lib/settingsSync";
 
 export type Status = "restoring" | "signedOut" | "authenticating" | "ready" | "error";
-export type View = "inbox" | "snoozed" | "watching" | "rules" | "folder" | "templates" | "settings" | "tag";
+export type View =
+  | "inbox"
+  | "snoozed"
+  | "watching"
+  | "rules"
+  | "folder"
+  | "templates"
+  | "quickActions"
+  | "settings"
+  | "tag";
 
 export interface ActivityEntry {
   id: string;
@@ -210,6 +230,24 @@ export interface AugmentApi {
   cancelProposal: (messageId: string) => void;
   clearAssistantChat: () => void;
 
+  // In-app composer (new / reply / reply-all / forward; send + save draft).
+  compose: ComposeDraft | null;
+  composeBusy: boolean;
+  composeError: string | null;
+  /** Hint: the granted scope includes sending (send still handles a 403). */
+  canSend: boolean;
+  composeNew: () => void;
+  composeReply: (mode: Exclude<ComposeMode, "new">, original: ParsedMessage) => void;
+  updateCompose: (patch: Partial<ComposeDraft>) => void;
+  closeCompose: () => void;
+  sendCompose: () => Promise<void>;
+  saveComposeDraft: () => Promise<void>;
+
+  // User-defined Quick Actions (keyboard-triggered macros).
+  quickActions: QuickAction[];
+  persistQuickActions: (next: QuickAction[]) => void;
+  runQuickAction: (action: QuickAction) => Promise<void>;
+
   settings: Settings;
   updateSettings: (patch: Partial<Settings>) => void;
 }
@@ -301,6 +339,7 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
   const assistantMessagesRef = useRef<AssistantMessage[]>([]);
   const assistantModeRef = useRef<AssistantMode>("request");
   const readerRef = useRef<ReaderState | null>(null);
+  const templatesRef = useRef<Template[]>([]);
 
   // Start in "restoring" while we attempt to revive a persisted session; the
   // mount effect below resolves it to "ready" or "signedOut".
@@ -328,12 +367,20 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
   const [sortKey, setSortKey] = useState<SortKey>("date");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [filterActive, setFilterActive] = useState(false);
+  // In-app composer: the open draft (null = closed), in-flight + error state, and
+  // whether the granted scope includes sending (a hint; send still handles 403).
+  const [compose, setCompose] = useState<ComposeDraft | null>(null);
+  const [composeBusy, setComposeBusy] = useState(false);
+  const [composeError, setComposeError] = useState<string | null>(null);
+  const [canSend, setCanSend] = useState(false);
   // Conversational assistant: mode + chat log (persisted) + in-flight flag.
   const [assistantMode, setAssistantModeState] = useState<AssistantMode>(() => loadAssistantChat().mode);
   const [assistantMessages, setAssistantMessages] = useState<AssistantMessage[]>(
     () => loadAssistantChat().messages,
   );
   const [assistantBusy, setAssistantBusy] = useState(false);
+  // User-defined Quick Actions (keyboard-triggered macros), persisted.
+  const [quickActions, setQuickActionsState] = useState<QuickAction[]>(() => loadQuickActions());
 
   const [rows, setRows] = useState<ThreadRow[]>([]);
   const [listTitle, setListTitle] = useState("Inbox");
@@ -377,6 +424,7 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
   assistantMessagesRef.current = assistantMessages;
   assistantModeRef.current = assistantMode;
   readerRef.current = reader;
+  templatesRef.current = templates;
 
   const pushActivity = useCallback((text: string, tone: ActivityEntry["tone"] = "info") => {
     setActivity((prev) => [makeActivity(text, tone), ...prev].slice(0, 60));
@@ -669,6 +717,7 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
       sessionRef.current.setEmail(profile.emailAddress);
       setEmail(profile.emailAddress);
       setStatus("ready");
+      setCanSend(sessionRef.current.canSend());
       pushActivity(`Signed in as ${profile.emailAddress}`, "success");
       await refresh();
     } catch (err) {
@@ -702,6 +751,7 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
         sessionRef.current.setEmail(profile.emailAddress);
         setEmail(profile.emailAddress);
         setStatus("ready");
+        setCanSend(sessionRef.current.canSend());
         pushActivity(`Welcome back, ${profile.emailAddress}`, "info");
         await refresh();
       } catch (err) {
@@ -1718,6 +1768,237 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
     [commitMessages],
   );
 
+  // ---- Composer ----------------------------------------------------------
+
+  const composeNew = useCallback(() => {
+    setComposeError(null);
+    setCompose(blankDraft());
+  }, []);
+
+  // Open the composer prefilled as a reply / reply-all / forward of `original`.
+  const composeReply = useCallback(
+    (mode: Exclude<ComposeMode, "new">, original: ParsedMessage) => {
+      setComposeError(null);
+      setCompose(draftFromMessage(mode, original, sessionRef.current.getEmail() ?? ""));
+    },
+    [],
+  );
+
+  // Open the composer on a fully-formed draft (used by Quick Action compose steps).
+  const setComposeDraft = useCallback((draft: ComposeDraft) => {
+    setComposeError(null);
+    setCompose(draft);
+  }, []);
+
+  const updateCompose = useCallback((patch: Partial<ComposeDraft>) => {
+    setCompose((prev) => (prev ? { ...prev, ...patch } : prev));
+  }, []);
+
+  const closeCompose = useCallback(() => {
+    setCompose(null);
+    setComposeError(null);
+  }, []);
+
+  // Low-level send of a given draft (also used for Quick Action auto-send).
+  const sendComposeDraft = useCallback(
+    (draft: ComposeDraft) => sendDraft(client, draft, sessionRef.current.getEmail() ?? ""),
+    [client],
+  );
+
+  const sendCompose = useCallback(async () => {
+    if (!compose) return;
+    setComposeBusy(true);
+    setComposeError(null);
+    try {
+      await sendComposeDraft(compose);
+      pushActivity(`Sent “${compose.subject || "(no subject)"}”`, "success");
+      setCompose(null);
+    } catch (err) {
+      const msg = errorMessage(err);
+      setComposeError(
+        /\b403\b|insufficient|permission|scope/i.test(msg)
+          ? "Sending needs the send permission — sign out and back in to reconnect your account."
+          : msg,
+      );
+    } finally {
+      setComposeBusy(false);
+    }
+  }, [compose, sendComposeDraft, pushActivity]);
+
+  const saveComposeDraft = useCallback(async () => {
+    if (!compose) return;
+    setComposeBusy(true);
+    setComposeError(null);
+    try {
+      await saveDraftToGmail(client, compose, sessionRef.current.getEmail() ?? "");
+      pushActivity(`Saved draft “${compose.subject || "(no subject)"}”`, "info");
+      setCompose(null);
+    } catch (err) {
+      setComposeError(errorMessage(err));
+    } finally {
+      setComposeBusy(false);
+    }
+  }, [compose, client, pushActivity]);
+
+  // ---- Quick Actions -----------------------------------------------------
+
+  const persistQuickActions = useCallback((next: QuickAction[]) => {
+    setQuickActionsState(next);
+    saveQuickActions(next);
+  }, []);
+
+  // A compose step's template body, flattened to plain text.
+  const templateBodyText = useCallback((templateId?: string): string => {
+    if (!templateId) return "";
+    const tpl = templatesRef.current.find((t) => t.id === templateId);
+    return tpl ? htmlToText(tpl.body) : "";
+  }, []);
+
+  // Run a compose step once on the primary thread: open the composer prefilled,
+  // or auto-send when it carries a template, the send flag, and recipients.
+  const runComposeStep = useCallback(
+    async (step: QuickStep, primaryId: string) => {
+      const self = sessionRef.current.getEmail() ?? "";
+      let draft: ComposeDraft;
+      if (step.type === "newMail") {
+        draft = blankDraft();
+      } else {
+        const open = readerRef.current;
+        let original: ParsedMessage | undefined;
+        if (open?.threadId === primaryId && open.messages.length > 0) {
+          original = open.messages[open.messages.length - 1];
+        } else {
+          const thread = await client.getThread(primaryId);
+          const msgs = (thread.messages ?? []).map(parseMessage);
+          original = msgs[msgs.length - 1];
+        }
+        if (!original) return;
+        const mode: ComposeMode =
+          step.type === "replyAll" ? "replyAll" : step.type === "forward" ? "forward" : "reply";
+        draft = draftFromMessage(mode, original, self);
+      }
+      const body = templateBodyText(step.templateId);
+      if (body) draft = { ...draft, body: draft.mode === "new" ? body : `${body}\n${draft.body}` };
+      if (step.sendWithoutReview && step.templateId && draft.to.trim()) {
+        await sendComposeDraft(draft);
+        pushActivity(`Sent “${draft.subject || "(no subject)"}”`, "success");
+      } else {
+        setComposeDraft(draft);
+      }
+    },
+    [client, templateBodyText, sendComposeDraft, setComposeDraft, pushActivity],
+  );
+
+  // Run one mailbox step across every target id.
+  const runMailboxStep = useCallback(
+    async (step: QuickStep, ids: string[]) => {
+      const settle = (work: (id: string) => Promise<unknown>) =>
+        Promise.allSettled(ids.map((id) => work(id)));
+      switch (step.type) {
+        case "tag": {
+          if (!step.value) return;
+          await addTagToThreads(ids, await ensureTag(step.value));
+          break;
+        }
+        case "untag": {
+          const tag = tagsRef.current.find((t) => t.name.toLowerCase() === (step.value ?? "").toLowerCase());
+          if (!tag) return;
+          for (const id of ids) await setThreadTag(id, tag, false);
+          break;
+        }
+        case "moveToFolder": {
+          if (!step.value) return;
+          await moveThreadsToFolder(ids, await ensureFolder(step.value));
+          break;
+        }
+        case "archive":
+          await settle((id) => client.archiveThread(id).then(() => removeRow(id)));
+          break;
+        case "delete":
+          await settle((id) => client.trashThread(id).then(() => removeRow(id)));
+          break;
+        case "markRead":
+          await settle((id) => markRead(id));
+          break;
+        case "markUnread":
+          await settle((id) =>
+            client.modifyThread(id, { addLabelIds: ["UNREAD"] }).then(() => {
+              setRows((prev) => prev.map((r) => (r.id === id ? { ...r, unread: true } : r)));
+            }),
+          );
+          break;
+        case "star":
+          await settle((id) => client.modifyThread(id, { addLabelIds: ["STARRED"] }));
+          break;
+        case "unstar":
+          await settle((id) => client.modifyThread(id, { removeLabelIds: ["STARRED"] }));
+          break;
+        case "snooze": {
+          const preset =
+            SNOOZE_PRESETS.find((p) => p.label.toLowerCase() === (step.value ?? "").toLowerCase()) ??
+            SNOOZE_PRESETS[0];
+          const dueAt = dueAtFromPreset(preset);
+          for (const id of ids) {
+            const row = rowsRef.current.find((r) => r.id === id);
+            await snooze(id, row?.subject ?? "(no subject)", dueAt);
+          }
+          break;
+        }
+        case "notifyWhenReplied": {
+          const dueAt = Date.now() + 3 * 24 * 60 * 60 * 1000; // default 3-day window
+          for (const id of ids) {
+            const row = rowsRef.current.find((r) => r.id === id);
+            await watch(id, row?.subject ?? "(no subject)", dueAt);
+          }
+          break;
+        }
+      }
+    },
+    [
+      addTagToThreads,
+      ensureTag,
+      setThreadTag,
+      moveThreadsToFolder,
+      ensureFolder,
+      client,
+      removeRow,
+      markRead,
+      snooze,
+      watch,
+    ],
+  );
+
+  // Execute a Quick Action: target = selection if any, else the open email.
+  // Mailbox steps hit all targets; a compose step runs once on the primary.
+  // Steps run in order, continue-on-error, with a single Activity summary.
+  const runQuickAction = useCallback(
+    async (action: QuickAction) => {
+      const targets =
+        selectedIdsRef.current.size > 0
+          ? [...selectedIdsRef.current]
+          : readerRef.current?.threadId
+            ? [readerRef.current.threadId]
+            : [];
+      if (targets.length === 0) {
+        pushActivity(`“${action.name}” — select or open an email first`, "warn");
+        return;
+      }
+      const primary = readerRef.current?.threadId ?? targets[0];
+      let failed = 0;
+      for (const step of action.steps) {
+        try {
+          if (isComposeStep(step.type)) await runComposeStep(step, primary);
+          else await runMailboxStep(step, targets);
+        } catch {
+          failed += 1;
+        }
+      }
+      if (failed > 0) pushActivity(`“${action.name}” — ${failed} step(s) failed`, "warn");
+      else pushActivity(`Ran “${action.name}”`, "success");
+    },
+    [pushActivity, runComposeStep, runMailboxStep],
+  );
+
   const runRulesNow = useCallback(() => runRulesInternal(false), [runRulesInternal]);
 
   const persistRules = useCallback((next: Rule[]) => {
@@ -1863,6 +2144,19 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
       applyProposal,
       cancelProposal,
       clearAssistantChat,
+      compose,
+      composeBusy,
+      composeError,
+      canSend,
+      composeNew,
+      composeReply,
+      updateCompose,
+      closeCompose,
+      sendCompose,
+      saveComposeDraft,
+      quickActions,
+      persistQuickActions,
+      runQuickAction,
       settings,
       updateSettings,
     }),
@@ -1948,6 +2242,19 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
       applyProposal,
       cancelProposal,
       clearAssistantChat,
+      compose,
+      composeBusy,
+      composeError,
+      canSend,
+      composeNew,
+      composeReply,
+      updateCompose,
+      closeCompose,
+      sendCompose,
+      saveComposeDraft,
+      quickActions,
+      persistQuickActions,
+      runQuickAction,
       settings,
       updateSettings,
     ],

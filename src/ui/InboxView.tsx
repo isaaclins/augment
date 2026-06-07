@@ -19,6 +19,7 @@ import {
   EyeIcon,
   FolderIcon,
   MailIcon,
+  PencilIcon,
   RefreshIcon,
   SparkleIcon,
   TagIcon,
@@ -103,6 +104,7 @@ export function InboxView() {
     suggestions,
     assistantOpen,
     setAssistantOpen,
+    composeNew,
     busy,
   } = useAugment();
 
@@ -261,6 +263,9 @@ export function InboxView() {
             )}
           </div>
           <div className="list-head-actions">
+            <button className="icon-btn" type="button" title="New message" onClick={composeNew}>
+              <PencilIcon size={16} />
+            </button>
             <select
               className="select sort-select"
               value={sortKey}

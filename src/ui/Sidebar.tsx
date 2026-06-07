@@ -7,6 +7,7 @@ import { openSettingsWindow } from "../lib/window";
 import { TagGlyph } from "./tags";
 import { TagEditor } from "./TagEditor";
 import {
+  BoltIcon,
   ClockIcon,
   CloseIcon,
   EyeIcon,
@@ -34,6 +35,7 @@ const NAV: NavItem[] = [
   { id: "watching", label: "Watching", icon: <EyeIcon size={17} /> },
   { id: "rules", label: "Rules", icon: <SlidersIcon size={17} /> },
   { id: "templates", label: "Templates", icon: <FileIcon size={17} /> },
+  { id: "quickActions", label: "Quick Actions", icon: <BoltIcon size={17} /> },
 ];
 
 export function Sidebar() {

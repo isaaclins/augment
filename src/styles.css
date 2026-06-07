@@ -2691,3 +2691,263 @@ h3 {
 .assistant-clear {
   align-self: flex-start;
 }
+
+/* ------------------------------------------------------------- Composer */
+
+.composer {
+  width: min(640px, 92vw);
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.composer-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 16px;
+  overflow-y: auto;
+}
+
+.composer-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.composer-label {
+  width: 48px;
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.composer-field .input {
+  flex: 1;
+}
+
+.composer-textarea {
+  min-height: 200px;
+  resize: vertical;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-elevated);
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  padding: 10px;
+  font-size: 13px;
+  font-family: inherit;
+  line-height: 1.5;
+  outline: none;
+}
+
+.composer-attachments {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.composer-attachment {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  font-size: 12px;
+}
+
+.composer-attachment-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-attachment-size {
+  color: var(--text-tertiary);
+}
+
+.composer-attachment-remove {
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  display: inline-flex;
+  padding: 2px;
+}
+
+.composer-attachment-remove:hover {
+  color: var(--danger);
+}
+
+.composer-warn {
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 12px;
+}
+
+.composer-error {
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  color: var(--danger);
+  font-size: 12px;
+}
+
+.composer-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+}
+
+.composer-foot-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* --------------------------------------------------------- Quick Actions */
+
+.qa-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 16px;
+  overflow-y: auto;
+}
+
+.qa-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+}
+
+.qa-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.qa-row-name {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.qa-row-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+}
+
+.qa-row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.qa-editor {
+  width: min(620px, 92vw);
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.qa-editor-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 16px;
+  overflow-y: auto;
+}
+
+.qa-editor-top {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.qa-conflict {
+  font-size: 12px;
+  color: var(--warn);
+}
+
+.qa-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.qa-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+}
+
+.qa-step-danger {
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--border));
+}
+
+.qa-step-label {
+  width: 120px;
+  flex-shrink: 0;
+  font-size: 12.5px;
+  font-weight: 550;
+}
+
+.qa-step-value {
+  flex: 1;
+  min-width: 0;
+}
+
+.qa-step-value .select {
+  width: 100%;
+}
+
+.qa-step-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.step-compose {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.step-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.menu-section {
+  padding: 5px 12px 3px;
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary);
+}

@@ -35,7 +35,8 @@ function MessageRail({
 }
 
 export function ThreadReader() {
-  const { reader, selectedId, archiveThread, snooze, watch, openInGmail, closeThread } = useAugment();
+  const { reader, selectedId, archiveThread, snooze, watch, openInGmail, closeThread, composeReply } =
+    useAugment();
   const [activeIndex, setActiveIndex] = useState(0);
 
   const threadId = reader?.threadId;
@@ -86,6 +87,20 @@ export function ThreadReader() {
         </div>
 
         <div className="reader-actions">
+          <button className="action-btn" type="button" onClick={() => composeReply("reply", active)}>
+            <MailIcon size={15} />
+            <span>Reply</span>
+          </button>
+          {active.to.length + active.cc.length > 1 && (
+            <button className="action-btn" type="button" onClick={() => composeReply("replyAll", active)}>
+              <MailIcon size={15} />
+              <span>Reply all</span>
+            </button>
+          )}
+          <button className="action-btn" type="button" onClick={() => composeReply("forward", active)}>
+            <ExternalIcon size={15} />
+            <span>Forward</span>
+          </button>
           <DurationMenu
             label="Snooze"
             icon={<ClockIcon size={15} />}

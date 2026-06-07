@@ -212,7 +212,7 @@ function TriageSection({
 // macOS WebKit doesn't focus a <button> on click, so a focus-based onKeyDown
 // would never fire. Capture phase also lets us intercept the keys before the
 // app-wide nav shortcut handler and stop them there.
-function KeybindCapture({
+export function KeybindCapture({
   value,
   onChange,
 }: {
