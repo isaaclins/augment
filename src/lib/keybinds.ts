@@ -11,7 +11,9 @@ export const NAV_ACTIONS: { id: NavAction; label: string }[] = [
   { id: "inbox", label: "Inbox" },
   { id: "snoozed", label: "Snoozed" },
   { id: "watching", label: "Watching" },
-  { id: "rules", label: "Rules" },
+  // The id stays "rules" (view key + stored keybind), but it opens the merged
+  // Setup view, so the shortcut is labelled "Setup" to match the sidebar.
+  { id: "rules", label: "Setup" },
 ];
 
 export type Keybinds = Record<NavAction, string>;
