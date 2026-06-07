@@ -2951,3 +2951,22 @@ h3 {
   letter-spacing: 0.04em;
   color: var(--text-tertiary);
 }
+
+/* Quick Action rows in the ⌘K palette. */
+.palette-action {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 10px;
+}
+
+.palette-action-icon {
+  display: inline-flex;
+  color: var(--accent);
+}
+
+.palette-action-name {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--text);
+}

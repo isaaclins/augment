@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useAugment } from "../state/augment";
-import { NAV_ACTIONS, matchCombo } from "../lib/keybinds";
+import { matchCombo, NAV_ACTIONS } from "../lib/keybinds";
 import { Sidebar } from "./Sidebar";
 import { InboxView } from "./InboxView";
 import { AssistantPanel } from "./AssistantPanel";
@@ -32,9 +32,31 @@ function useNavShortcuts() {
   }, [keybinds, setView]);
 }
 
+// Fire a Quick Action when its bound shortcut is pressed. Skipped while typing or
+// recording a binding, so it can't steal keys from an input.
+function useQuickActionShortcuts() {
+  const { quickActions, runQuickAction } = useAugment();
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('input, textarea, [contenteditable="true"], [data-keycapture]')) return;
+      for (const action of quickActions) {
+        if (action.shortcut && matchCombo(event, action.shortcut)) {
+          event.preventDefault();
+          void runQuickAction(action);
+          return;
+        }
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [quickActions, runQuickAction]);
+}
+
 export function Workspace() {
   const { view } = useAugment();
   useNavShortcuts();
+  useQuickActionShortcuts();
 
   return (
     <div className="workspace">

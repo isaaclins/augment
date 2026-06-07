@@ -246,7 +246,8 @@ export interface AugmentApi {
   // User-defined Quick Actions (keyboard-triggered macros).
   quickActions: QuickAction[];
   persistQuickActions: (next: QuickAction[]) => void;
-  runQuickAction: (action: QuickAction) => Promise<void>;
+  /** Run a Quick Action. `explicitIds` overrides the selection/open-email target. */
+  runQuickAction: (action: QuickAction, explicitIds?: string[]) => Promise<void>;
 
   settings: Settings;
   updateSettings: (patch: Partial<Settings>) => void;
@@ -1972,18 +1973,20 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
   // Mailbox steps hit all targets; a compose step runs once on the primary.
   // Steps run in order, continue-on-error, with a single Activity summary.
   const runQuickAction = useCallback(
-    async (action: QuickAction) => {
+    async (action: QuickAction, explicitIds?: string[]) => {
+      const explicit = explicitIds && explicitIds.length > 0 ? explicitIds : null;
       const targets =
-        selectedIdsRef.current.size > 0
+        explicit ??
+        (selectedIdsRef.current.size > 0
           ? [...selectedIdsRef.current]
           : readerRef.current?.threadId
             ? [readerRef.current.threadId]
-            : [];
+            : []);
       if (targets.length === 0) {
         pushActivity(`“${action.name}” — select or open an email first`, "warn");
         return;
       }
-      const primary = readerRef.current?.threadId ?? targets[0];
+      const primary = explicit ? explicit[0] : readerRef.current?.threadId ?? targets[0];
       let failed = 0;
       for (const step of action.steps) {
         try {

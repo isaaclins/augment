@@ -1,18 +1,24 @@
-// ⌘K command-palette search. Instant metadata search always; full-text body
-// search once the SQLite/FTS5 index is built. Keyboard-first: type to filter,
-// ↑/↓ to move, ↵ to open, esc to close. Opening a result re-fetches the full
-// thread, so a stale hit self-heals.
+// ⌘K command palette. Runs Quick Actions (on the current target) and searches
+// mail. Instant metadata search always; full-text body search once the
+// SQLite/FTS5 index is built. Keyboard-first: type to filter, ↑/↓ to move, ↵ to
+// run/open, esc to close. Opening a result re-fetches the full thread.
 
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useAugment } from "../state/augment";
 import { searchEngine, type EngineStatus } from "../lib/search/engine";
 import { addressLabel } from "../lib/gmail/parse";
 import { formatListDate } from "../lib/time";
+import { formatCombo } from "../lib/keybinds";
 import type { ThreadRow } from "../lib/gmail/inbox";
-import { SearchIcon } from "./icons";
+import type { QuickAction } from "../lib/quickActions";
+import { BoltIcon, SearchIcon } from "./icons";
+
+type PaletteItem =
+  | { kind: "action"; action: QuickAction }
+  | { kind: "thread"; row: ThreadRow };
 
 export function SearchPalette() {
-  const { openThread, setView } = useAugment();
+  const { openThread, setView, quickActions, runQuickAction } = useAugment();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
@@ -20,7 +26,6 @@ export function SearchPalette() {
   const [status, setStatus] = useState<EngineStatus | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
-  // Initialize the engine and track its status (FTS readiness, backfill progress).
   useEffect(() => {
     void searchEngine.init();
     return searchEngine.subscribe(setStatus);
@@ -45,7 +50,7 @@ export function SearchPalette() {
     }
   }, [open]);
 
-  // Run the (async) search; ignore results that arrive after a newer query.
+  // Run the (async) mail search; ignore results that arrive after a newer query.
   useEffect(() => {
     if (!open) {
       setResults([]);
@@ -60,31 +65,50 @@ export function SearchPalette() {
     };
   }, [open, query]);
 
+  // Quick Actions whose name matches (all of them when the query is empty).
+  const actionMatches = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return q ? quickActions.filter((a) => a.name.toLowerCase().includes(q)) : quickActions;
+  }, [query, quickActions]);
+
+  const items = useMemo<PaletteItem[]>(
+    () => [
+      ...actionMatches.map((action) => ({ kind: "action" as const, action })),
+      ...results.map((row) => ({ kind: "thread" as const, row })),
+    ],
+    [actionMatches, results],
+  );
+
   useEffect(() => {
-    setActive((value) => Math.min(value, Math.max(0, results.length - 1)));
-  }, [results.length]);
+    setActive((value) => Math.min(value, Math.max(0, items.length - 1)));
+  }, [items.length]);
 
   useEffect(() => {
     listRef.current?.querySelector<HTMLElement>(`[data-i="${active}"]`)?.scrollIntoView({ block: "nearest" });
   }, [active]);
 
-  function choose(row: ThreadRow) {
+  function choose(item: PaletteItem) {
+    if (item.kind === "action") {
+      setOpen(false);
+      void runQuickAction(item.action);
+      return;
+    }
     setView("inbox");
-    void openThread(row.id);
+    void openThread(item.row.id);
     setOpen(false);
   }
 
   function onInputKeyDown(event: ReactKeyboardEvent<HTMLInputElement>) {
     if (event.key === "ArrowDown") {
       event.preventDefault();
-      setActive((value) => Math.min(value + 1, results.length - 1));
+      setActive((value) => Math.min(value + 1, items.length - 1));
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
       setActive((value) => Math.max(value - 1, 0));
     } else if (event.key === "Enter") {
       event.preventDefault();
-      const row = results[active];
-      if (row) choose(row);
+      const item = items[active];
+      if (item) choose(item);
     } else if (event.key === "Escape") {
       event.preventDefault();
       event.stopPropagation();
@@ -110,7 +134,7 @@ export function SearchPalette() {
           <input
             autoFocus
             className="palette-input"
-            placeholder={status?.ftsReady ? "Search your mail (full text)…" : "Search your mail…"}
+            placeholder={status?.ftsReady ? "Run an action or search your mail…" : "Run an action or search…"}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={onInputKeyDown}
@@ -119,29 +143,48 @@ export function SearchPalette() {
         </div>
 
         <div className="palette-results" ref={listRef}>
-          {results.length === 0 ? (
+          {items.length === 0 ? (
             <div className="palette-empty">{emptyMessage}</div>
           ) : (
-            results.map((row, i) => (
-              <button
-                key={row.id}
-                type="button"
-                data-i={i}
-                className={`palette-row ${i === active ? "palette-row-active" : ""}`}
-                onMouseEnter={() => setActive(i)}
-                onClick={() => choose(row)}
-              >
-                <div className="palette-row-top">
-                  <span className="palette-from">{addressLabel(row.from)}</span>
-                  <span className="palette-date">{formatListDate(row.date)}</span>
-                </div>
-                <div className="palette-subject">
-                  {row.unread && <span className="row-dot" aria-label="unread" />}
-                  {row.subject || "(no subject)"}
-                </div>
-                {row.snippet && <div className="palette-snippet">{row.snippet}</div>}
-              </button>
-            ))
+            items.map((item, i) =>
+              item.kind === "action" ? (
+                <button
+                  key={`a-${item.action.id}`}
+                  type="button"
+                  data-i={i}
+                  className={`palette-row palette-action ${i === active ? "palette-row-active" : ""}`}
+                  onMouseEnter={() => setActive(i)}
+                  onClick={() => choose(item)}
+                >
+                  <span className="palette-action-icon">
+                    <BoltIcon size={15} />
+                  </span>
+                  <span className="palette-action-name">{item.action.name}</span>
+                  {item.action.shortcut && (
+                    <kbd className="nav-shortcut">{formatCombo(item.action.shortcut)}</kbd>
+                  )}
+                </button>
+              ) : (
+                <button
+                  key={`t-${item.row.id}`}
+                  type="button"
+                  data-i={i}
+                  className={`palette-row ${i === active ? "palette-row-active" : ""}`}
+                  onMouseEnter={() => setActive(i)}
+                  onClick={() => choose(item)}
+                >
+                  <div className="palette-row-top">
+                    <span className="palette-from">{addressLabel(item.row.from)}</span>
+                    <span className="palette-date">{formatListDate(item.row.date)}</span>
+                  </div>
+                  <div className="palette-subject">
+                    {item.row.unread && <span className="row-dot" aria-label="unread" />}
+                    {item.row.subject || "(no subject)"}
+                  </div>
+                  {item.row.snippet && <div className="palette-snippet">{item.row.snippet}</div>}
+                </button>
+              ),
+            )
           )}
         </div>
 
@@ -151,7 +194,7 @@ export function SearchPalette() {
             <kbd>↓</kbd> navigate
           </span>
           <span>
-            <kbd>↵</kbd> open
+            <kbd>↵</kbd> run / open
           </span>
           <span className="palette-count">
             {status?.ftsReady ? <FtsControl status={status} /> : `${indexed} indexed`}

@@ -12,6 +12,7 @@ import { useClickOutside } from "./hooks";
 import { SORT_OPTIONS, type SortKey } from "../lib/features/view";
 import {
   ArchiveIcon,
+  BoltIcon,
   CheckIcon,
   ClockIcon,
   CloseIcon,
@@ -105,6 +106,8 @@ export function InboxView() {
     assistantOpen,
     setAssistantOpen,
     composeNew,
+    quickActions,
+    runQuickAction,
     busy,
   } = useAugment();
 
@@ -128,6 +131,18 @@ export function InboxView() {
       kind: "item",
       label: folder.name,
       onSelect: () => onPick(folder),
+    }));
+  }
+
+  // The "Quick Actions ▸" submenu, run against the given thread ids.
+  function quickActionItems(ids: string[]): MenuNode[] {
+    if (quickActions.length === 0) {
+      return [{ kind: "item", label: "No quick actions", disabled: true, onSelect: () => {} }];
+    }
+    return quickActions.map((qa) => ({
+      kind: "item",
+      label: qa.name,
+      onSelect: () => void runQuickAction(qa, ids),
     }));
   }
 
@@ -158,6 +173,12 @@ export function InboxView() {
                   icon: <TagGlyph color={tag.color} icon={tag.icon} size={15} />,
                   onSelect: () => void addTagToThreads([...selectedIds], tag),
                 })),
+        },
+        {
+          kind: "submenu",
+          label: "Quick Actions",
+          icon: <BoltIcon size={15} />,
+          items: quickActionItems([...selectedIds]),
         },
         { kind: "separator" },
         { kind: "item", label: "Clear selection", onSelect: clearSelection },
@@ -215,6 +236,12 @@ export function InboxView() {
                   onSelect: () => void setThreadTag(row.id, tag, !applied),
                 };
               }),
+      },
+      {
+        kind: "submenu",
+        label: "Quick Actions",
+        icon: <BoltIcon size={15} />,
+        items: quickActionItems([row.id]),
       },
       { kind: "separator" },
       { kind: "item", label: "Open in Gmail", icon: <ExternalIcon size={15} />, onSelect: () => void openInGmail(row.id) },
