@@ -369,7 +369,26 @@ step list of action-type + action-value).
       "Quick Actions ▸" submenu + ⌘K palette entries. Under multi-select: mailbox
       steps apply to ALL targets; compose runs once on the PRIMARY (open/first) email.
 
-All branches resolved → mega-goal-prompt written (see below / delivered to user).
+All branches resolved → mega-goal-prompt written + EXECUTED.
+
+## Quick Actions + Composer — SHIPPED (branch feat/quick-actions)
+Status: implemented across 5 milestones, all four checks green (tsc, cargo check,
+vite build, 77 vitest tests incl. new compose MIME tests). 3 commits on the branch.
+NOT live-verified against Gmail (send needs the new scope + re-consent).
+- M1: oauth.rs SCOPE += gmail.send (re-consent needed); GmailClient.sendMessage +
+  trashThread; Session.canSend(); parser `cc`.
+- M2: shared `gmail/mime.ts` (templates refactored onto it); `features/compose.ts`
+  (ComposeDraft, multipart MIME + attachments + threading, reply/forward prefill,
+  send/saveDraft); `quickActions.ts` model + STEP_META/STEP_GROUPS; store persistence.
+- M3: composer state in augment.tsx (compose/canSend/send/saveDraft, 403→reconnect);
+  `Composer.tsx` modal (To/Cc/Bcc/subject/body/attachments); Reply/Forward in reader,
+  New in inbox header; rendered in Workspace.
+- M4: quickActions state + persist + runQuickAction executor (mailbox steps→all
+  targets, compose once on primary, template auto-send); `QuickActionsManager.tsx`
+  sidebar view + inline editor (KeybindCapture, step list, value pickers, conflict
+  warnings); sidebar nav + Workspace view.
+- M5: global shortcut listener (Workspace), "Quick Actions ▸" row context submenu,
+  ⌘K palette entries; runQuickAction explicit-ids; compose MIME unit tests.
 
 ## Hard constraint found (scope/re-consent)
 - Current OAuth scope = `gmail.modify` (oauth.rs:26). Its comment states it does

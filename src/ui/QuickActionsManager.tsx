@@ -15,8 +15,7 @@ import {
 import { SNOOZE_PRESETS } from "../lib/time";
 import { formatCombo } from "../lib/keybinds";
 import { KeybindCapture } from "./SettingsView";
-import { useClickOutside } from "./hooks";
-import { CloseIcon, PlusIcon, TrashIcon } from "./icons";
+import { BoltIcon, CloseIcon, PlusIcon, TrashIcon } from "./icons";
 
 function newStep(type: QuickStepType): QuickStep {
   return { id: crypto.randomUUID(), type };
@@ -37,78 +36,25 @@ function useReservedCombos(exceptId: string): Set<string> {
   }, [settings.keybinds, quickActions, exceptId]);
 }
 
-// The dropdown that adds a step, grouped by category.
-function AddStepMenu({ onAdd }: { onAdd: (type: QuickStepType) => void }) {
-  const [open, setOpen] = useState(false);
-  const ref = useClickOutside<HTMLDivElement>(() => setOpen(false));
-  return (
-    <div className="menu" ref={ref}>
-      <button className="action-btn" type="button" onClick={() => setOpen((o) => !o)}>
-        <PlusIcon size={14} />
-        <span>Add step</span>
-      </button>
-      {open && (
-        <div className="menu-pop" role="menu">
-          {STEP_GROUPS.map((group) => (
-            <div key={group.group}>
-              <div className="menu-section">{group.group}</div>
-              {group.types.map((type) => (
-                <button
-                  key={type}
-                  className="menu-item"
-                  type="button"
-                  onClick={() => {
-                    onAdd(type);
-                    setOpen(false);
-                  }}
-                >
-                  {STEP_META[type].label}
-                </button>
-              ))}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // The value control for a step, depending on its kind.
 function StepValue({ step, onChange }: { step: QuickStep; onChange: (patch: Partial<QuickStep>) => void }) {
   const { tags, folders, templates } = useAugment();
   const kind = STEP_META[step.type].value;
 
-  if (kind === "tag") {
+  if (kind === "tag" || kind === "folder" || kind === "snooze") {
+    const options =
+      kind === "tag"
+        ? tags.map((t) => t.name)
+        : kind === "folder"
+          ? folders.map((f) => f.name)
+          : SNOOZE_PRESETS.map((p) => p.label);
+    const placeholder = kind === "tag" ? "Choose tag…" : kind === "folder" ? "Choose folder…" : "When…";
     return (
       <select className="select" value={step.value ?? ""} onChange={(e) => onChange({ value: e.target.value })}>
-        <option value="">(choose tag)</option>
-        {tags.map((t) => (
-          <option key={t.id} value={t.name}>
-            {t.name}
-          </option>
-        ))}
-      </select>
-    );
-  }
-  if (kind === "folder") {
-    return (
-      <select className="select" value={step.value ?? ""} onChange={(e) => onChange({ value: e.target.value })}>
-        <option value="">(choose folder)</option>
-        {folders.map((f) => (
-          <option key={f.id} value={f.name}>
-            {f.name}
-          </option>
-        ))}
-      </select>
-    );
-  }
-  if (kind === "snooze") {
-    return (
-      <select className="select" value={step.value ?? ""} onChange={(e) => onChange({ value: e.target.value })}>
-        <option value="">(choose when)</option>
-        {SNOOZE_PRESETS.map((p) => (
-          <option key={p.label} value={p.label}>
-            {p.label}
+        <option value="">{placeholder}</option>
+        {options.map((opt) => (
+          <option key={opt} value={opt}>
+            {opt}
           </option>
         ))}
       </select>
@@ -125,10 +71,10 @@ function StepValue({ step, onChange }: { step: QuickStep; onChange: (patch: Part
             onChange({ templateId: e.target.value || undefined, templateName: tpl?.name });
           }}
         >
-          <option value="">No template (open composer)</option>
+          <option value="">No template — open composer</option>
           {templates.map((t) => (
             <option key={t.id} value={t.id}>
-              {t.name}
+              Template: {t.name}
             </option>
           ))}
         </select>
@@ -144,7 +90,46 @@ function StepValue({ step, onChange }: { step: QuickStep; onChange: (patch: Part
       </div>
     );
   }
-  return null;
+  return <span className="qa-step-novalue">No options</span>;
+}
+
+// Inline, non-clipping step-type picker (15 types is too many for a dropdown).
+function AddStep({ onAdd }: { onAdd: (type: QuickStepType) => void }) {
+  const [open, setOpen] = useState(false);
+  if (!open) {
+    return (
+      <button className="qa-add-btn" type="button" onClick={() => setOpen(true)}>
+        <PlusIcon size={14} /> Add step
+      </button>
+    );
+  }
+  return (
+    <div className="qa-add-panel">
+      {STEP_GROUPS.map((group) => (
+        <div className="qa-add-group" key={group.group}>
+          <span className="qa-add-group-label">{group.group}</span>
+          <div className="qa-add-options">
+            {group.types.map((type) => (
+              <button
+                key={type}
+                className={`qa-add-option ${STEP_META[type].destructive ? "qa-add-option-danger" : ""}`}
+                type="button"
+                onClick={() => {
+                  onAdd(type);
+                  setOpen(false);
+                }}
+              >
+                {STEP_META[type].label}
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
+      <button className="link-btn qa-add-cancel" type="button" onClick={() => setOpen(false)}>
+        Cancel
+      </button>
+    </div>
+  );
 }
 
 function ActionEditor({ initial, onClose }: { initial: QuickAction; onClose: () => void }) {
@@ -172,8 +157,7 @@ function ActionEditor({ initial, onClose }: { initial: QuickAction; onClose: () 
   }
 
   function save() {
-    const name = draft.name.trim() || "Untitled";
-    const next = { ...draft, name };
+    const next = { ...draft, name: draft.name.trim() || "Untitled" };
     const exists = quickActions.some((q) => q.id === next.id);
     persistQuickActions(
       exists ? quickActions.map((q) => (q.id === next.id ? next : q)) : [...quickActions, next],
@@ -181,82 +165,91 @@ function ActionEditor({ initial, onClose }: { initial: QuickAction; onClose: () 
     onClose();
   }
 
-  const conflict = draft.shortcut && reserved.has(draft.shortcut);
+  const conflict = Boolean(draft.shortcut) && reserved.has(draft.shortcut);
 
   return (
     <div className="modal-backdrop" onMouseDown={onClose}>
       <div className="modal qa-editor" onMouseDown={(e) => e.stopPropagation()}>
         <div className="modal-head">
-          <h2>Quick Action</h2>
+          <h2>{initial.steps.length === 0 && initial.name === "New action" ? "New Quick Action" : "Edit Quick Action"}</h2>
           <button className="icon-btn" type="button" title="Close" onClick={onClose}>
             <CloseIcon size={16} />
           </button>
         </div>
 
         <div className="qa-editor-body">
-          <div className="qa-editor-top">
-            <label className="composer-field">
-              <span className="composer-label">Name</span>
-              <input
-                className="input"
-                value={draft.name}
-                autoFocus
-                onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
-              />
-            </label>
-            <label className="composer-field">
-              <span className="composer-label">Shortcut</span>
+          <div className="qa-field">
+            <label className="qa-field-label">Name</label>
+            <input
+              className="input"
+              value={draft.name}
+              autoFocus
+              placeholder="e.g. File under Job Applications"
+              onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
+            />
+          </div>
+
+          <div className="qa-field">
+            <label className="qa-field-label">Shortcut</label>
+            <div className="qa-shortcut-row">
               <KeybindCapture value={draft.shortcut} onChange={(combo) => setDraft((d) => ({ ...d, shortcut: combo }))} />
               {draft.shortcut && (
-                <button
-                  className="link-btn"
-                  type="button"
-                  onClick={() => setDraft((d) => ({ ...d, shortcut: "" }))}
-                >
+                <button className="link-btn" type="button" onClick={() => setDraft((d) => ({ ...d, shortcut: "" }))}>
                   Clear
                 </button>
               )}
-            </label>
-            {conflict && <div className="qa-conflict">That shortcut is already in use.</div>}
+              {conflict && <span className="qa-conflict">already in use</span>}
+            </div>
           </div>
 
-          <div className="qa-steps">
-            {draft.steps.length === 0 && <div className="folder-empty">No steps yet — add one below.</div>}
-            {draft.steps.map((step, i) => {
-              const meta = STEP_META[step.type];
-              return (
-                <div className={`qa-step ${meta.destructive ? "qa-step-danger" : ""}`} key={step.id}>
-                  <span className="qa-step-label">{meta.label}</span>
-                  <div className="qa-step-value">
-                    <StepValue step={step} onChange={(patch) => setStep(step.id, patch)} />
+          <div className="qa-field">
+            <label className="qa-field-label">Steps</label>
+            <div className="qa-steps">
+              {draft.steps.length === 0 && (
+                <div className="qa-steps-empty">No steps yet — add the first one below.</div>
+              )}
+              {draft.steps.map((step, i) => {
+                const meta = STEP_META[step.type];
+                return (
+                  <div className={`qa-step ${meta.destructive ? "qa-step-danger" : ""}`} key={step.id}>
+                    <span className="qa-step-num">{i + 1}</span>
+                    <span className="qa-step-label">{meta.label}</span>
+                    <div className="qa-step-value">
+                      <StepValue step={step} onChange={(patch) => setStep(step.id, patch)} />
+                    </div>
+                    <div className="qa-step-actions">
+                      <button className="qa-icon" type="button" title="Move up" disabled={i === 0} onClick={() => moveStep(i, -1)}>
+                        ↑
+                      </button>
+                      <button
+                        className="qa-icon"
+                        type="button"
+                        title="Move down"
+                        disabled={i === draft.steps.length - 1}
+                        onClick={() => moveStep(i, 1)}
+                      >
+                        ↓
+                      </button>
+                      <button
+                        className="qa-icon qa-icon-del"
+                        type="button"
+                        title="Remove step"
+                        onClick={() => setDraft((d) => ({ ...d, steps: d.steps.filter((s) => s.id !== step.id) }))}
+                      >
+                        <CloseIcon size={13} />
+                      </button>
+                    </div>
                   </div>
-                  <div className="qa-step-actions">
-                    <button className="icon-btn" type="button" title="Up" onClick={() => moveStep(i, -1)}>
-                      ↑
-                    </button>
-                    <button className="icon-btn" type="button" title="Down" onClick={() => moveStep(i, 1)}>
-                      ↓
-                    </button>
-                    <button
-                      className="icon-btn"
-                      type="button"
-                      title="Remove step"
-                      onClick={() => setDraft((d) => ({ ...d, steps: d.steps.filter((s) => s.id !== step.id) }))}
-                    >
-                      <CloseIcon size={13} />
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
+            <AddStep onAdd={(type) => setDraft((d) => ({ ...d, steps: [...d.steps, newStep(type)] }))} />
           </div>
-
-          <AddStepMenu onAdd={(type) => setDraft((d) => ({ ...d, steps: [...d.steps, newStep(type)] }))} />
         </div>
 
-        <div className="composer-foot">
-          <div />
-          <div className="composer-foot-right">
+        <div className="modal-foot">
+          <span className="qa-foot-hint">Runs on your selection, or the open email.</span>
+          <div className="modal-foot-right">
             <button className="btn" type="button" onClick={onClose}>
               Cancel
             </button>
@@ -275,14 +268,16 @@ export function QuickActionsManager() {
   const [editing, setEditing] = useState<QuickAction | null>(null);
 
   function duplicate(action: QuickAction) {
-    const copy: QuickAction = {
-      ...action,
-      id: crypto.randomUUID(),
-      name: `${action.name} copy`,
-      shortcut: "",
-      steps: action.steps.map((s) => ({ ...s, id: crypto.randomUUID() })),
-    };
-    persistQuickActions([...quickActions, copy]);
+    persistQuickActions([
+      ...quickActions,
+      {
+        ...action,
+        id: crypto.randomUUID(),
+        name: `${action.name} copy`,
+        shortcut: "",
+        steps: action.steps.map((s) => ({ ...s, id: crypto.randomUUID() })),
+      },
+    ]);
   }
   function remove(id: string) {
     persistQuickActions(quickActions.filter((q) => q.id !== id));
@@ -298,7 +293,10 @@ export function QuickActionsManager() {
   return (
     <div className="panel">
       <div className="panel-head">
-        <h2>Quick Actions</h2>
+        <div>
+          <h2>Quick Actions</h2>
+          <p className="panel-sub">One-keystroke macros that run on your selection or the open email.</p>
+        </div>
         <button className="btn btn-primary" type="button" onClick={() => setEditing(newAction())}>
           <PlusIcon size={14} /> New action
         </button>
@@ -306,12 +304,17 @@ export function QuickActionsManager() {
 
       <div className="qa-list">
         {quickActions.length === 0 && (
-          <div className="folder-empty">
-            No Quick Actions yet. Create a macro of steps and bind it to a shortcut.
+          <div className="qa-list-empty">
+            <BoltIcon size={22} />
+            <p>No Quick Actions yet.</p>
+            <span>Build a macro of steps and bind it to a shortcut.</span>
           </div>
         )}
         {quickActions.map((action, i) => (
           <div className="qa-row" key={action.id}>
+            <span className="qa-row-icon">
+              <BoltIcon size={15} />
+            </span>
             <div className="qa-row-main">
               <span className="qa-row-name">{action.name}</span>
               <span className="qa-row-meta">
@@ -326,16 +329,22 @@ export function QuickActionsManager() {
               <button className="action-btn" type="button" onClick={() => setEditing(action)}>
                 Edit
               </button>
-              <button className="action-btn" type="button" onClick={() => duplicate(action)}>
-                Duplicate
+              <button className="qa-icon" type="button" title="Duplicate" onClick={() => duplicate(action)}>
+                <PlusIcon size={14} />
               </button>
-              <button className="icon-btn" type="button" title="Up" onClick={() => move(i, -1)}>
+              <button className="qa-icon" type="button" title="Move up" disabled={i === 0} onClick={() => move(i, -1)}>
                 ↑
               </button>
-              <button className="icon-btn" type="button" title="Down" onClick={() => move(i, 1)}>
+              <button
+                className="qa-icon"
+                type="button"
+                title="Move down"
+                disabled={i === quickActions.length - 1}
+                onClick={() => move(i, 1)}
+              >
                 ↓
               </button>
-              <button className="icon-btn" type="button" title="Delete" onClick={() => remove(action.id)}>
+              <button className="qa-icon qa-icon-del" type="button" title="Delete" onClick={() => remove(action.id)}>
                 <TrashIcon size={15} />
               </button>
             </div>
