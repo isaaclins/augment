@@ -50,14 +50,26 @@ function StepValue({ step, onChange }: { step: QuickStep; onChange: (patch: Part
           : SNOOZE_PRESETS.map((p) => p.label);
     const placeholder = kind === "tag" ? "Choose tag…" : kind === "folder" ? "Choose folder…" : "When…";
     return (
-      <select className="select" value={step.value ?? ""} onChange={(e) => onChange({ value: e.target.value })}>
-        <option value="">{placeholder}</option>
-        {options.map((opt) => (
-          <option key={opt} value={opt}>
-            {opt}
-          </option>
-        ))}
-      </select>
+      <div className="step-value-col">
+        <select className="select" value={step.value ?? ""} onChange={(e) => onChange({ value: e.target.value })}>
+          <option value="">{placeholder}</option>
+          {options.map((opt) => (
+            <option key={opt} value={opt}>
+              {opt}
+            </option>
+          ))}
+        </select>
+        {step.type === "tag" && (
+          <label className="step-checkbox" title="If the email already has this tag, remove it instead">
+            <input
+              type="checkbox"
+              checked={Boolean(step.toggle)}
+              onChange={(e) => onChange({ toggle: e.target.checked })}
+            />
+            <span>Toggle — remove if already applied</span>
+          </label>
+        )}
+      </div>
     );
   }
   if (kind === "compose") {

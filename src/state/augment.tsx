@@ -1898,7 +1898,33 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
       switch (step.type) {
         case "tag": {
           if (!step.value) return;
-          await addTagToThreads(ids, await ensureTag(step.value));
+          const tag = await ensureTag(step.value);
+          if (!step.toggle) {
+            await addTagToThreads(ids, tag);
+            break;
+          }
+          // Toggle: per email, remove the tag if already applied, else add it.
+          const toAdd: string[] = [];
+          const toRemove: string[] = [];
+          for (const id of ids) {
+            const row = rowsRef.current.find((r) => r.id === id);
+            (row && row.labelIds.includes(tag.labelId) ? toRemove : toAdd).push(id);
+          }
+          if (toAdd.length > 0) await addTagToThreads(toAdd, tag);
+          if (toRemove.length > 0) {
+            await Promise.allSettled(
+              toRemove.map((id) => client.modifyThread(id, { removeLabelIds: [tag.labelId] })),
+            );
+            setRows((prev) =>
+              prev.map((r) =>
+                toRemove.includes(r.id)
+                  ? { ...r, labelIds: r.labelIds.filter((l) => l !== tag.labelId) }
+                  : r,
+              ),
+            );
+            const n = toRemove.length;
+            pushActivity(`Removed “${tag.name}” from ${n} ${n === 1 ? "email" : "emails"}`, "info");
+          }
           break;
         }
         case "untag": {
@@ -1966,6 +1992,7 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
       markRead,
       snooze,
       watch,
+      pushActivity,
     ],
   );
 

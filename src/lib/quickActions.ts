@@ -27,6 +27,9 @@ export interface QuickStep {
   type: QuickStepType;
   /** Tag name / folder name / snooze-preset label, depending on the step type. */
   value?: string;
+  /** Tag step only: if the email already has this tag, remove it instead of
+   *  re-adding it (toggle behaviour). Evaluated per email. */
+  toggle?: boolean;
   /** Compose steps only: a template to prefill the body. */
   templateId?: string;
   templateName?: string;

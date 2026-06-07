@@ -3047,6 +3047,7 @@ h3 {
   flex-shrink: 0;
 }
 
+.step-value-col,
 .step-compose {
   display: flex;
   flex-direction: column;
