@@ -14,19 +14,6 @@ import { CloseIcon, CpuIcon, RefreshIcon } from "./icons";
 
 type TestState = "idle" | "testing" | "ok" | "fail";
 
-// Eight quick-pick accents (used by the custom-accent row). Warm-leaning set
-// that sits comfortably on every palette's surfaces.
-const ACCENT_PICKS = [
-  "#5d4432",
-  "#b45309",
-  "#c2410c",
-  "#2f5d3a",
-  "#0f766e",
-  "#2563eb",
-  "#6d28d9",
-  "#be185d",
-];
-
 const MODES: { id: ThemeMode; label: string }[] = [
   { id: "system", label: "System" },
   { id: "light", label: "Light" },
@@ -104,17 +91,6 @@ function AppearanceSection({
             >
               Theme
             </button>
-            {ACCENT_PICKS.map((hex) => (
-              <button
-                key={hex}
-                type="button"
-                className={`accent-pick ${accent === hex ? "is-active" : ""}`}
-                style={{ background: hex }}
-                title={hex}
-                aria-label={`Accent ${hex}`}
-                onClick={() => updateSettings({ accent: hex })}
-              />
-            ))}
             <label className="accent-custom" title="Custom accent">
               <input
                 type="color"
@@ -333,9 +309,6 @@ function TriageSection({
             </span>
           </div>
           <div className="settings-row-control">
-            <span className={`triage-status triage-status-${test}`}>
-              {test === "ok" ? "● Connected" : test === "fail" ? "● Offline" : ""}
-            </span>
             <button className="btn" type="button" disabled={test === "testing"} onClick={() => void testConnection()}>
               {test === "testing" ? "Testing…" : "Test connection"}
             </button>
@@ -491,25 +464,6 @@ export function SettingsView({
           </div>
 
           <div className="settings-rows">
-            <div className="settings-row">
-              <div className="settings-row-text">
-                <span className="settings-row-label">Auto-apply rules on refresh</span>
-                <span className="settings-row-hint">
-                  Run your enabled rules every time the inbox reloads.
-                </span>
-              </div>
-              <div className="settings-row-control">
-                <label className="toggle">
-                  <input
-                    type="checkbox"
-                    checked={settings.autoApplyRules}
-                    onChange={(e) => updateSettings({ autoApplyRules: e.target.checked })}
-                  />
-                  <span />
-                </label>
-              </div>
-            </div>
-
             <div className="settings-row">
               <div className="settings-row-text">
                 <span className="settings-row-label">Snooze label</span>

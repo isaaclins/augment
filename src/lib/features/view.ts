@@ -15,12 +15,13 @@ export interface SortOption {
   label: string;
 }
 
+// Sort axes a fast triage user actually reaches for. Finding a specific sender
+// or subject is the job of ⌘K search, not a sort axis (UI-AUDIT H4). sortRows
+// below still supports the other keys for the assistant; they're just not in
+// the manual dropdown.
 export const SORT_OPTIONS: SortOption[] = [
   { key: "date", label: "Date" },
-  { key: "sender", label: "Sender" },
-  { key: "subject", label: "Subject" },
   { key: "priority", label: "Priority" },
-  { key: "category", label: "Label" },
   { key: "unread", label: "Unread first" },
 ];
 

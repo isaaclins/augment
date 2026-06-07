@@ -109,15 +109,6 @@ export function RichTextEditor({ initialHtml, placeholder, onChange }: RichTextE
             >
               Link
             </button>
-            <button
-              type="button"
-              className="rte-btn"
-              title="Clear formatting"
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => run("removeFormat")}
-            >
-              Clear
-            </button>
           </>
         )}
         <span className="rte-spacer" />

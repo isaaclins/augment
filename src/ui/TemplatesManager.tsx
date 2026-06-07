@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useAugment } from "../state/augment";
 import { templatePreview, type Template } from "../lib/features/templates";
 import { RichTextEditor } from "./RichTextEditor";
-import { CheckIcon, ExternalIcon, FileIcon, PlusIcon, RefreshIcon, TrashIcon } from "./icons";
+import { CheckIcon, ExternalIcon, FileIcon, PlusIcon, TrashIcon } from "./icons";
 
 interface Draft {
   id?: string;
@@ -56,7 +56,7 @@ function TemplateEditor({
 }
 
 export function TemplatesManager() {
-  const { templates, templatesLoading, refreshTemplates, saveTemplate, deleteTemplate, useTemplate } =
+  const { templates, templatesLoading, saveTemplate, deleteTemplate, useTemplate } =
     useAugment();
   const [editing, setEditing] = useState<Draft | null>(null);
   const [saving, setSaving] = useState(false);
@@ -87,15 +87,6 @@ export function TemplatesManager() {
       <div className="panel-head">
         <h2>Templates</h2>
         <div className="panel-head-actions">
-          <button
-            className="icon-btn"
-            type="button"
-            title="Refresh"
-            disabled={templatesLoading}
-            onClick={() => void refreshTemplates()}
-          >
-            <RefreshIcon size={16} className={templatesLoading ? "spin" : undefined} />
-          </button>
           <button
             className="btn btn-primary"
             type="button"

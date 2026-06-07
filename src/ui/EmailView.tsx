@@ -12,7 +12,7 @@ interface EmailViewProps {
 }
 
 export function EmailView({ html, text }: EmailViewProps) {
-  const { srcDoc, blockedRemoteCount, mode } = useMemo(
+  const { srcDoc, blockedRemoteCount } = useMemo(
     () => renderEmailSrcDoc({ html, text }),
     [html, text],
   );
@@ -25,7 +25,6 @@ export function EmailView({ html, text }: EmailViewProps) {
           <span>
             {blockedRemoteCount} remote {blockedRemoteCount === 1 ? "item" : "items"} blocked
           </span>
-          <span className="email-shield-mode">{mode === "text" ? "plaintext" : "sanitized HTML"}</span>
         </div>
       )}
       <iframe
