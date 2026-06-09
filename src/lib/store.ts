@@ -73,7 +73,7 @@ export const DEFAULT_SETTINGS: Settings = {
   syncLabelsToGmail: true,
   suggestedLabels: [],
   assistantModel: "",
-  theme: "cafe",
+  theme: "graphite",
   mode: "system",
   accent: "",
   allowedSenders: [],

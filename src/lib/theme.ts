@@ -62,7 +62,7 @@ type ThemeSettings = Pick<Settings, "theme" | "mode" | "accent">;
 /** Apply palette + mode + custom accent to <html>. Idempotent and cheap. */
 export function applyTheme(settings: ThemeSettings): void {
   const root = document.documentElement;
-  root.dataset.theme = settings.theme || "cafe";
+  root.dataset.theme = settings.theme || "graphite";
   root.dataset.mode = resolveMode(settings.mode);
 
   const accent = settings.accent?.trim();

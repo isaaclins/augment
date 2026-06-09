@@ -371,7 +371,10 @@ h3 {
   letter-spacing: 0.14em;
 }
 
+/* ============================================ Sign-in / Onboarding stage */
+
 .signin {
+  position: relative;
   height: 100%;
   padding-top: var(--titlebar-h);
   display: flex;
@@ -379,96 +382,422 @@ h3 {
   justify-content: center;
   background-color: var(--bg);
   background-image:
-    radial-gradient(120% 120% at 50% -10%, var(--accent-soft), transparent 55%),
+    radial-gradient(58% 44% at 50% 40%, var(--accent-soft), transparent 70%),
     linear-gradient(to right, var(--grid-color) 1px, transparent 1px),
     linear-gradient(to bottom, var(--grid-color) 1px, transparent 1px);
   background-size: 100% 100%, var(--grid-size) var(--grid-size), var(--grid-size) var(--grid-size);
+  overflow: hidden;
+  animation: signinPageIn 700ms var(--ease-out) both;
+}
+
+.signin-grain {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(85% 60% at 50% 0%, transparent 55%, rgba(0, 0, 0, 0.18) 100%),
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent 2px,
+      rgba(255, 255, 255, 0.012) 3px
+    );
+  mix-blend-mode: overlay;
+  opacity: 0.55;
 }
 
 .signin-card {
-  width: 420px;
+  position: relative;
+  width: 440px;
   max-width: calc(100vw - 48px);
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md), inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  padding: 28px 28px 22px;
+  padding: 22px 26px 20px;
+  isolation: isolate;
 }
 
-.signin-brand {
+.signin-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent) 30%, transparent),
+    transparent 55%
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  opacity: 0.4;
+}
+
+/* Stagger the persistent card sections on first mount. */
+.signin-card > .signin-head { animation: signinRise 520ms var(--ease-out) 80ms both; }
+.signin-card > .signin-stepper { animation: signinRise 520ms var(--ease-out) 160ms both; }
+
+@keyframes signinRise {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes signinPageIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Card head — eyebrow status (left) + mini logo+wordmark (right) */
+.signin-head {
   display: flex;
   align-items: center;
-  gap: 14px;
-  margin-bottom: 22px;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 16px;
 }
 
+.signin-mark-mini {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.signin-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.signin-eyebrow-sep { color: var(--border-strong); }
+
+.signin-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 50%, transparent);
+  animation: signinPulse 2.4s var(--ease-out) infinite;
+}
+
+@keyframes signinPulse {
+  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 50%, transparent); }
+  70%  { box-shadow: 0 0 0 9px color-mix(in srgb, var(--accent) 0%, transparent); }
+  100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent); }
+}
+
+/* Logo (two sizes: --sm in the head, --xl in the welcome hero). */
 .signin-logo {
-  width: 44px;
-  height: 44px;
   border-radius: var(--radius);
   background: var(--accent);
   color: var(--accent-ink);
-  font-weight: 700;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 6px 18px -8px color-mix(in srgb, var(--accent) 60%, transparent);
 }
 
-.signin-brand h1 {
-  font-size: 19px;
-  font-weight: 700;
+.signin-logo--sm { width: 24px; height: 24px; border-radius: 6px; }
+
+.signin-logo--xl {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  animation: signinLogoPop 700ms var(--ease-spring) 180ms both;
+}
+
+@keyframes signinLogoPop {
+  0%   { opacity: 0; transform: scale(0.78); }
+  60%  { opacity: 1; transform: scale(1.06); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+.signin-wordmark {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-
-.signin-tag {
-  margin: 3px 0 0;
+  letter-spacing: 0.18em;
   color: var(--text-secondary);
-  font-size: 12px;
 }
 
-.signin-features {
+/* Step progress (3 bars) */
+.signin-stepper {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 22px;
+}
+
+.signin-step-dot {
+  height: 3px;
+  flex: 1;
+  background: var(--border);
+  border-radius: 2px;
+  transition:
+    background var(--t-base) var(--ease-out),
+    box-shadow var(--t-base) var(--ease-out);
+}
+
+.signin-step-dot.is-active { background: var(--accent); }
+
+.signin-step-dot.is-current {
+  box-shadow: 0 0 14px -2px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+/* Step body — slides in from the side it conceptually comes from. */
+.signin-step {
+  --step-from: 12px;
+  min-height: 280px;
+  display: flex;
+  flex-direction: column;
+}
+
+.signin-step--back { --step-from: -12px; }
+
+.signin-step > * {
+  animation: signinStepRise 420ms var(--ease-out) both;
+}
+.signin-step > *:nth-child(1) { animation-delay: 40ms; }
+.signin-step > *:nth-child(2) { animation-delay: 100ms; }
+.signin-step > *:nth-child(3) { animation-delay: 160ms; }
+.signin-step > *:nth-child(4) { animation-delay: 220ms; }
+.signin-step > *:nth-child(5) { animation-delay: 280ms; }
+.signin-step > *:nth-child(6) { animation-delay: 340ms; }
+.signin-step > *:nth-child(7) { animation-delay: 400ms; }
+
+@keyframes signinStepRise {
+  from { opacity: 0; transform: translateX(var(--step-from)); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* Welcome hero */
+.signin-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 4px 0 12px;
+}
+
+.signin-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  text-wrap: balance;
+}
+
+.signin-title--step {
+  font-size: 17px;
+  margin-bottom: 8px;
+}
+
+.signin-sub {
+  margin: 0 0 18px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+
+/* Features list (step 2) */
+.signin-feats {
   list-style: none;
-  margin: 0 0 22px;
+  margin: 0 0 20px;
   padding: 0;
   display: grid;
-  gap: 14px;
+  gap: 12px;
 }
 
-.signin-features li {
+.signin-feats li {
   display: flex;
   gap: 12px;
   align-items: flex-start;
 }
 
-.signin-feature-icon {
+.signin-feat-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: var(--accent-soft);
   color: var(--accent);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
   margin-top: 1px;
 }
 
-.signin-features strong {
+.signin-feats strong {
   display: block;
   font-size: 13px;
   font-weight: 600;
+  color: var(--text);
 }
 
-.signin-features em {
+.signin-feats em {
+  display: block;
+  margin-top: 2px;
   font-style: normal;
   color: var(--text-secondary);
   font-size: 12px;
+  line-height: 1.5;
+}
+
+/* Permissions grid (step 3) */
+.signin-perms {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  padding: 14px;
+  margin: 0 0 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+
+.signin-perms-label {
+  margin: 0 0 8px;
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  font-weight: 600;
+}
+
+.signin-perm-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.signin-perm-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text);
+  line-height: 1.4;
+}
+
+.signin-perm-yes,
+.signin-perm-no {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.signin-perm-yes {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+}
+
+.signin-perm-no {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  color: var(--danger);
+}
+
+/* Step nav row */
+.signin-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: auto;
+}
+
+.signin-nav--end { justify-content: flex-end; }
+.signin-nav--start { justify-content: flex-start; margin-top: 10px; }
+
+.signin-nav .signin-cta {
+  width: auto;
+  padding-left: 22px;
+  padding-right: 22px;
+}
+
+.signin-back {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  font-weight: 500;
+  padding: 8px 12px;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition:
+    background var(--t-fast) var(--ease-out),
+    color var(--t-fast) var(--ease-out);
+}
+
+.signin-back:hover { background: var(--bg-hover); color: var(--text); }
+
+/* CTA — sheen + arrow nudge on hover */
+.signin-cta {
+  position: relative;
+  overflow: hidden;
+  gap: 8px;
+}
+
+.signin-cta::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    110deg,
+    transparent 40%,
+    rgba(255, 255, 255, 0.22) 50%,
+    transparent 60%
+  );
+  transform: translateX(-110%);
+  transition: transform 700ms var(--ease-out);
+  pointer-events: none;
+}
+
+.signin-cta:hover:not(:disabled)::after { transform: translateX(110%); }
+
+.signin-cta-arrow {
+  display: inline-block;
+  transition: transform var(--t-fast) var(--ease-out);
+}
+
+.signin-cta:hover:not(:disabled) .signin-cta-arrow { transform: translateX(3px); }
+
+/* Pending / error / foot */
+.signin-pending {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
 }
 
 .signin-hint {
+  margin: 0;
   text-align: center;
   color: var(--text-secondary);
   font-size: 12.5px;
-  margin: 12px 0 0;
 }
 
 .signin-cancel {
-  display: block;
-  margin: 10px auto 0;
   padding: 6px 14px;
   border: none;
   background: transparent;
@@ -477,16 +806,15 @@ h3 {
   font-weight: 500;
   border-radius: var(--radius-pill);
   cursor: pointer;
-  transition: background var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out);
+  transition:
+    background var(--t-fast) var(--ease-out),
+    color var(--t-fast) var(--ease-out);
 }
 
-.signin-cancel:hover {
-  background: var(--bg-hover);
-  color: var(--text);
-}
+.signin-cancel:hover { background: var(--bg-hover); color: var(--text); }
 
 .signin-error {
-  margin: 12px 0 0;
+  margin: 14px 0 0;
   padding: 10px 12px;
   border-radius: var(--radius);
   background: var(--danger-soft);
@@ -496,7 +824,7 @@ h3 {
 }
 
 .signin-foot {
-  margin: 18px 0 0;
+  margin: 16px 0 0;
   color: var(--text-tertiary);
   font-size: 11px;
   line-height: 1.55;
@@ -508,6 +836,20 @@ h3 {
   padding: 1px 5px;
   border-radius: var(--radius-sm);
   font-size: 11px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .signin,
+  .signin-head,
+  .signin-stepper,
+  .signin-step > *,
+  .signin-logo--xl,
+  .signin-dot,
+  .signin-cta::after,
+  .signin-cta-arrow {
+    animation: none !important;
+    transition: none !important;
+  }
 }
 
 /* -------------------------------------------------------------- Workspace */
@@ -928,10 +1270,35 @@ h3 {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
 }
 
 .row-unread .row-from {
   font-weight: 700;
+}
+
+/* "DRAFT" pill on a draft row so the user can tell it apart from received mail
+   in the same list (Sent / Drafts views both surface DRAFT-labelled threads). */
+.row-draft-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  font-weight: 700;
+  color: var(--danger);
+  background: var(--danger-soft);
+  border: 1px solid color-mix(in srgb, var(--danger) 22%, transparent);
+  flex-shrink: 0;
+}
+
+/* Faint accent rail on the row so the eye picks up drafts quickly. */
+.row-draft {
+  box-shadow: inset 3px 0 0 0 var(--danger);
 }
 
 .row-date {
@@ -3042,6 +3409,22 @@ h3 {
   outline: none;
 }
 
+/* Rich-text body inside the composer modal. The RTE handles its own toolbar
+   and editable region; we just give it a min-height matching the previous
+   textarea. */
+.composer-richtext {
+  display: flex;
+  flex-direction: column;
+}
+
+.composer-richtext .rte {
+  min-height: 220px;
+}
+
+.composer-richtext .rte-area {
+  min-height: 180px;
+}
+
 .composer-attachments {
   display: flex;
   flex-direction: column;
@@ -3859,6 +4242,30 @@ h3 {
   }
 }
 
+/* Blinking caret at the end of a streaming reply. */
+.stream-cursor {
+  display: inline-block;
+  width: 0.45em;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  background: currentColor;
+  opacity: 0.55;
+  animation: stream-blink 1s steps(2, start) infinite;
+}
+
+@keyframes stream-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stream-cursor {
+    animation: none;
+  }
+}
+
 /* ============================================================ States
    Composed empty states + loading skeletons. */
 
@@ -4020,15 +4427,6 @@ h3 {
   display: none;
 }
 
-/* Sign-in one-liner (replaced the 4-row feature list — UI-AUDIT). */
-.signin-line {
-  margin: 0 0 22px;
-  color: var(--text-secondary);
-  font-size: 12.5px;
-  line-height: 1.6;
-  text-wrap: pretty;
-}
-
 /* ===================================================== Rule condition tree
    Nested boolean groups rendered as indented, bracketed boxes with AND/OR
    joiners, so a rule reads like  A OR (B AND C). */
@@ -4120,4 +4518,306 @@ h3 {
 .triage-chip-addable:focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px currentColor;
+}
+
+/* ============================================== Reader "Today" dashboard
+   Replaces the bare "no thread selected" stub. At-a-glance inbox health +
+   navigation: greeting, four counters, next snooze/watch due, shortcut hints. */
+
+.reader-dash {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  overflow-y: auto;
+}
+
+.dash {
+  width: 100%;
+  max-width: 520px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.dash > * {
+  animation: dashRise 480ms var(--ease-out) both;
+}
+.dash > *:nth-child(1) { animation-delay: 40ms; }
+.dash > *:nth-child(2) { animation-delay: 120ms; }
+.dash > *:nth-child(3) { animation-delay: 200ms; }
+.dash > *:nth-child(4) { animation-delay: 280ms; }
+
+@keyframes dashRise {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.dash-head {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dash-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.dash-greeting {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  text-wrap: balance;
+}
+
+.dash-name {
+  color: var(--accent);
+}
+
+.dash-sub {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+
+.dash-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.dash-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    transform var(--t-fast) var(--ease-out),
+    border-color var(--t-fast) var(--ease-out),
+    background var(--t-fast) var(--ease-out);
+}
+
+.dash-stat:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: var(--border-strong);
+  background: var(--bg-hover);
+}
+
+.dash-stat:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.dash-stat:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.dash-stat-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+  margin-bottom: 2px;
+}
+
+.dash-stat.is-live .dash-stat-icon {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.dash-stat-num {
+  font-size: 22px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  color: var(--text);
+}
+
+.dash-stat.is-live .dash-stat-num {
+  color: var(--accent);
+}
+
+.dash-stat-label {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  font-weight: 600;
+}
+
+/* Next snooze/watch due — single one-tap row. */
+.dash-next {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 14px;
+  align-items: center;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color var(--t-fast) var(--ease-out),
+    background var(--t-fast) var(--ease-out);
+}
+
+.dash-next:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-hover);
+}
+
+.dash-next-kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.dash-next-subject {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dash-next-when {
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* CTA row + shortcut hints */
+.dash-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 4px;
+}
+
+.dash-cta {
+  align-self: flex-start;
+  padding: 9px 16px;
+}
+
+.dash-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border);
+}
+
+.dash-shortcut {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+}
+
+.dash-shortcut kbd {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+}
+
+@media (max-width: 720px) {
+  .dash-stats { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dash > * { animation: none !important; }
+  .dash-stat,
+  .dash-next { transition: none !important; }
+}
+
+/* ====================================== Sidebar account footer rework
+   Avatar + email + tiny sign-out icon — replaces the truncated email +
+   wrapped "Sign out" text in the previous layout. */
+
+.sidebar-account {
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.account-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.account-info {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.account-label {
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  font-weight: 600;
+}
+
+.sidebar-account .account-email {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-signout {
+  width: 26px;
+  height: 26px;
+  color: var(--text-tertiary);
+}
+
+.account-signout:hover {
+  color: var(--danger);
 }
