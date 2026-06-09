@@ -30,9 +30,9 @@ function AppearanceSection({
   settings: Settings;
   updateSettings: (patch: Partial<Settings>) => void;
 }) {
-  const activeTheme = settings.theme || "cafe";
+  const activeTheme = settings.theme || "graphite";
   const accent = (settings.accent || "").toLowerCase();
-  const themeAccent = THEMES.find((t) => t.id === activeTheme)?.swatch.accent ?? "#5d4432";
+  const themeAccent = THEMES.find((t) => t.id === activeTheme)?.swatch.accent ?? "#3a4654";
 
   return (
     <section className="settings-section">
