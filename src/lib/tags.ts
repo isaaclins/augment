@@ -78,11 +78,20 @@ export const TAG_ICON_KEYS: TagIconKey[] = [
 export const DEFAULT_TAG_COLOR: TagColor = "blue";
 export const DEFAULT_TAG_ICON: TagIconKey = "tag";
 
-const TAG_LABEL_PREFIX = "Augment/Tags/";
+export const TAG_LABEL_PREFIX = "Augment/Tags/";
 
 /** The Gmail label name backing a tag with the given display name. */
 export function tagLabelName(name: string): string {
   return `${TAG_LABEL_PREFIX}${name}`;
+}
+
+/** If `labelName` is a tag-backing label (`Augment/Tags/<name>`), return the
+ *  bare tag name. Otherwise null. Used to import pre-existing Gmail labels as
+ *  Augment tags on sign-in. */
+export function parseTagLabelName(labelName: string): string | null {
+  if (!labelName.startsWith(TAG_LABEL_PREFIX)) return null;
+  const name = labelName.slice(TAG_LABEL_PREFIX.length).trim();
+  return name.length > 0 ? name : null;
 }
 
 // Hand-picked colours/icons for the built-in "starter" labels (the old fixed

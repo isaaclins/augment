@@ -108,6 +108,14 @@ export const MailIcon = (p: IconProps) => (
   </Svg>
 );
 
+// Paper-plane silhouette for the Sent view.
+export const SendIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M22 2 11 13" />
+    <path d="M22 2 15 22l-4-9-9-4z" />
+  </Svg>
+);
+
 export const FolderIcon = (p: IconProps) => (
   <Svg {...p}>
     <path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />

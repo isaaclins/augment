@@ -5,6 +5,7 @@
 
 import type {
   GmailDraft,
+  GmailDraftsListResponse,
   GmailHistoryResponse,
   GmailLabel,
   GmailLabelsListResponse,
@@ -140,6 +141,28 @@ export class GmailClient {
     });
   }
 
+  /** List Gmail drafts (id + minimal message ref per item). Used to look up the
+   *  draft id for a thread when reopening a saved draft. */
+  listDrafts(maxResults = 100, pageToken?: string): Promise<GmailDraftsListResponse> {
+    const params = new URLSearchParams();
+    params.set("maxResults", String(maxResults));
+    if (pageToken) params.set("pageToken", pageToken);
+    return this.request<GmailDraftsListResponse>(`/drafts?${params.toString()}`);
+  }
+
+  /** Replace an existing draft's content with a fresh MIME message. */
+  updateDraft(id: string, raw: string): Promise<GmailDraft> {
+    return this.request<GmailDraft>(`/drafts/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      body: JSON.stringify({ message: { raw } }),
+    });
+  }
+
+  /** Remove a draft from Gmail Drafts. */
+  deleteDraft(id: string): Promise<void> {
+    return this.request<void>(`/drafts/${encodeURIComponent(id)}`, { method: "DELETE" });
+  }
+
   /**
    * Send a base64url RFC 2822 message. Pass `threadId` to keep a reply in its
    * original thread (the message's References/In-Reply-To must also match).
@@ -152,8 +175,11 @@ export class GmailClient {
     });
   }
 
-  listLabels(): Promise<GmailLabelsListResponse> {
-    return this.request<GmailLabelsListResponse>("/labels");
+  async listLabels(): Promise<GmailLabelsListResponse> {
+    const response = await this.request<GmailLabelsListResponse>("/labels");
+    // Prime the shared cache so subsequent ensureLabelId calls don't re-fetch.
+    this.labelCache = response.labels ?? [];
+    return response;
   }
 
   createLabel(name: string): Promise<GmailLabel> {
@@ -174,6 +200,16 @@ export class GmailClient {
       if (index >= 0) this.labelCache[index] = updated;
     }
     return updated;
+  }
+
+  /** Delete a user label. Gmail removes it from every thread that carried it.
+   *  System labels (INBOX, SENT, …) can't be deleted; callers should only pass
+   *  ids from labels they created. */
+  async deleteLabel(id: string): Promise<void> {
+    await this.request<void>(`/labels/${encodeURIComponent(id)}`, { method: "DELETE" });
+    if (this.labelCache) {
+      this.labelCache = this.labelCache.filter((label) => label.id !== id);
+    }
   }
 
   modifyThread(id: string, body: ModifyLabels): Promise<GmailThread> {

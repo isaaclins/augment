@@ -194,7 +194,12 @@ export function AssistantPanel() {
           <div className="chat-log">
             {assistantMessages.map((message) => (
               <div key={message.id} className={`chat-msg chat-${message.role}`}>
-                {message.content && <div className="chat-bubble">{message.content}</div>}
+                {message.content && (
+                  <div className="chat-bubble">
+                    {message.content}
+                    {message.streaming && <span className="stream-cursor" aria-hidden />}
+                  </div>
+                )}
                 {message.actions && message.actions.length > 0 && (
                   <ProposalCard
                     message={message}
@@ -207,7 +212,7 @@ export function AssistantPanel() {
                 )}
               </div>
             ))}
-            {assistantBusy && (
+            {assistantBusy && !assistantMessages.some((m) => m.streaming) && (
               <div className="chat-msg chat-assistant">
                 <div className="chat-bubble chat-thinking">
                   <span>Thinking</span>

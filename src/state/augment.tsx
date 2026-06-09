@@ -63,7 +63,15 @@ import {
   type Folder,
   type Settings,
 } from "../lib/store";
-import { defaultTagStyle, tagLabelName, type Tag, type TagColor, type TagIconKey } from "../lib/tags";
+import {
+  defaultTagStyle,
+  tagLabelName,
+  type Tag,
+  type TagColor,
+  type TagIconKey,
+} from "../lib/tags";
+import { folderLabelName } from "../lib/folders";
+import { planFolderSync, planTagSync } from "../lib/gmail/sync";
 import { isComposeStep, type QuickAction, type QuickStep } from "../lib/quickActions";
 import { checkOllama, STARTER_LABELS, triageThread, type TriageResult } from "../lib/features/triage";
 import { defaultSortDir, sortRows, type SortDir, type SortKey } from "../lib/features/view";
@@ -77,6 +85,8 @@ import {
 import { dueAtFromPreset, SNOOZE_PRESETS } from "../lib/time";
 import {
   blankDraft,
+  buildMime,
+  draftFromExisting,
   draftFromMessage,
   saveDraft as saveDraftToGmail,
   sendDraft,
@@ -91,6 +101,8 @@ export type View =
   | "inbox"
   | "snoozed"
   | "watching"
+  | "sent"
+  | "drafts"
   | "rules"
   | "folder"
   | "templates"
@@ -242,6 +254,8 @@ export interface AugmentApi {
   canSend: boolean;
   composeNew: () => void;
   composeReply: (mode: Exclude<ComposeMode, "new">, original: ParsedMessage) => void;
+  /** Reopen an existing Gmail draft thread in the composer for further edits. */
+  editDraft: (threadId: string) => Promise<void>;
   updateCompose: (patch: Partial<ComposeDraft>) => void;
   closeCompose: () => void;
   sendCompose: () => Promise<void>;
@@ -331,6 +345,13 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
   const settingsRef = useRef<Settings>(DEFAULT_SETTINGS);
   const rulesRef = useRef<Rule[]>([]);
   const tagsRef = useRef<Tag[]>([]);
+  const foldersRef = useRef<Folder[]>([]);
+  const activeFolderIdRef = useRef<string | null>(null);
+  const activeTagIdRef = useRef<string | null>(null);
+  // Set inside the body below once `changeView` is declared. Lets earlier
+  // callbacks (e.g. the Gmail mirror) request a view change without creating a
+  // TDZ cycle in their dependency list.
+  const changeViewRef = useRef<(next: View) => void>(() => {});
   const triageRef = useRef<Record<string, TriageResult>>({});
   // Guards against overlapping triage batches (e.g. rapid refreshes).
   const triagingRef = useRef(false);
@@ -437,6 +458,9 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
   settingsRef.current = settings;
   rulesRef.current = rules;
   tagsRef.current = tags;
+  foldersRef.current = folders;
+  activeFolderIdRef.current = activeFolderId;
+  activeTagIdRef.current = activeTagId;
   triageRef.current = triage;
   rowsRef.current = rows;
   selectedIdsRef.current = selectedIds;
@@ -716,9 +740,121 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
     }
   }, [client]);
 
+  // Mirror tags against `Augment/Tags/<name>` labels in Gmail. Gmail is the
+  // source of truth: tags missing from Gmail are pruned locally, and prefixed
+  // labels not yet tracked locally are imported. Planning lives in
+  // `lib/gmail/sync.ts` (testable in isolation); this hook just executes the
+  // resulting plan.
+  const syncGmailTags = useCallback(async () => {
+    try {
+      const { labels } = await client.listLabels();
+      if (!labels) return;
+
+      const plan = planTagSync({ localTags: tagsRef.current, gmailLabels: labels });
+
+      if (plan.prunes.length > 0) {
+        const pruneIds = new Set(plan.prunes.map((t) => t.id));
+        const activeId = activeTagIdRef.current;
+        const activeDropped = !!activeId && pruneIds.has(activeId);
+        setTags((prev) => {
+          const kept = prev.filter((t) => !pruneIds.has(t.id));
+          saveTags(kept);
+          return kept;
+        });
+        if (activeDropped) changeViewRef.current("inbox");
+        pushActivity(
+          `Removed ${plan.prunes.length} ${plan.prunes.length === 1 ? "tag" : "tags"} deleted in Gmail`,
+          "info",
+        );
+      }
+
+      if (plan.imports.length > 0) {
+        const fresh: Tag[] = plan.imports.map((i) => ({
+          id: crypto.randomUUID(),
+          name: i.name,
+          labelId: i.labelId,
+          color: i.color,
+          icon: i.icon,
+          source: "user",
+        }));
+        setTags((prev) => {
+          const next = [...prev, ...fresh];
+          saveTags(next);
+          return next;
+        });
+        pushActivity(
+          `Imported ${fresh.length} ${fresh.length === 1 ? "tag" : "tags"} from Gmail`,
+          "success",
+        );
+      }
+    } catch {
+      // A failed sync just means tags stay out of sync until the next ready.
+    }
+  }, [client, pushActivity]);
+
+  // Mirror folders against `Augment/Folders/<name>` labels in Gmail. Three
+  // phases: migrate any folder still backed by a bare `<name>` label, prune
+  // local folders whose label is gone, import prefixed labels not yet tracked.
+  // A failed migration leaves the bare label in place; the planner accounts for
+  // that and won't prune the folder until BOTH bare and prefixed labels are
+  // gone. Planning lives in `lib/gmail/sync.ts`.
+  const syncGmailFolders = useCallback(async () => {
+    try {
+      const { labels } = await client.listLabels();
+      if (!labels) return;
+
+      const plan = planFolderSync({ localFolders: foldersRef.current, gmailLabels: labels });
+
+      for (const migration of plan.migrations) {
+        try {
+          await client.updateLabel(migration.labelId, migration.toName);
+        } catch {
+          // Leave the bare label in place; we'll retry on the next ready. The
+          // planner's prune rule ensures we don't drop the folder meanwhile.
+        }
+      }
+
+      if (plan.prunes.length > 0) {
+        const pruneIds = new Set(plan.prunes.map((f) => f.id));
+        const activeId = activeFolderIdRef.current;
+        const activeDropped = !!activeId && pruneIds.has(activeId);
+        setFolders((prev) => {
+          const kept = prev.filter((f) => !pruneIds.has(f.id));
+          saveFolders(kept);
+          return kept;
+        });
+        if (activeDropped) changeViewRef.current("inbox");
+        pushActivity(
+          `Removed ${plan.prunes.length} ${plan.prunes.length === 1 ? "folder" : "folders"} deleted in Gmail`,
+          "info",
+        );
+      }
+
+      if (plan.imports.length > 0) {
+        const fresh: Folder[] = plan.imports.map((i) => ({ id: crypto.randomUUID(), name: i.name }));
+        setFolders((prev) => {
+          const next = [...prev, ...fresh];
+          saveFolders(next);
+          return next;
+        });
+        pushActivity(
+          `Imported ${fresh.length} ${fresh.length === 1 ? "folder" : "folders"} from Gmail`,
+          "success",
+        );
+      }
+    } catch {
+      // A failed sync just means folders stay out of sync until the next ready.
+    }
+  }, [client, pushActivity]);
+
   useEffect(() => {
-    if (status === "ready") void resolveTagLabels();
-  }, [status, resolveTagLabels]);
+    if (status !== "ready") return;
+    void (async () => {
+      await syncGmailFolders();
+      await syncGmailTags();
+      await resolveTagLabels();
+    })();
+  }, [status, syncGmailFolders, syncGmailTags, resolveTagLabels]);
 
   // Each sign-in gets an attempt id; cancelling bumps it so a late resolve or
   // reject from the abandoned flow can't flip the UI back.
@@ -1005,14 +1141,16 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
 
   const changeView = useCallback(
     (next: View) => {
-      if (next === "inbox") {
+      if (next === "inbox" || next === "sent" || next === "drafts") {
         setActiveFolderId(null);
         setActiveTagId(null);
         setFilterActive(false);
-        listQueryRef.current = "in:inbox";
-        setListTitle("Inbox");
+        listQueryRef.current =
+          next === "sent" ? "in:sent" : next === "drafts" ? "in:drafts" : "in:inbox";
+        setListTitle(next === "sent" ? "Sent" : next === "drafts" ? "Drafts" : "Inbox");
         clearSelection();
-        setViewState("inbox");
+        closeThread();
+        setViewState(next);
         void refreshInbox();
         return;
       }
@@ -1021,8 +1159,9 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
       if (next === "templates") void refreshTemplates();
       setViewState(next);
     },
-    [clearSelection, refreshInbox, refreshTemplates],
+    [clearSelection, closeThread, refreshInbox, refreshTemplates],
   );
+  changeViewRef.current = changeView;
 
   const openFolder = useCallback(
     (folder: Folder) => {
@@ -1031,7 +1170,7 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
       setFilterActive(false);
       // Gmail search query for the folder's label; JSON.stringify quotes and
       // escapes the name so multi-word labels match.
-      listQueryRef.current = `label:${JSON.stringify(folder.name)}`;
+      listQueryRef.current = `label:${JSON.stringify(folderLabelName(folder.name))}`;
       setListTitle(folder.name);
       clearSelection();
       closeThread();
@@ -1068,7 +1207,7 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
       }
       try {
         // Create the backing Gmail label (idempotent if it already exists).
-        await client.ensureLabelId(name);
+        await client.ensureLabelId(folderLabelName(name));
         const folder: Folder = { id: crypto.randomUUID(), name };
         setFolders((prev) => {
           const nextFolders = [...prev, folder];
@@ -1087,14 +1226,31 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
   // under it are left untouched.
   const removeFolder = useCallback(
     (id: string) => {
+      let removed: Folder | undefined;
       setFolders((prev) => {
+        removed = prev.find((f) => f.id === id);
         const nextFolders = prev.filter((f) => f.id !== id);
         saveFolders(nextFolders);
         return nextFolders;
       });
       if (activeFolderId === id) changeView("inbox");
+      if (!removed) return;
+      // Mirror the delete to Gmail. `ensureLabelId` resolves the label by name
+      // (creating it if it somehow vanished, then immediately deleting it — a
+      // no-op for our purposes). A failed delete is non-fatal.
+      const folder = removed;
+      void client
+        .ensureLabelId(folderLabelName(folder.name))
+        .then((labelId) => client.deleteLabel(labelId))
+        .then(() => pushActivity(`Deleted folder “${folder.name}”`, "info"))
+        .catch(() =>
+          pushActivity(
+            `Deleted folder “${folder.name}” locally — Gmail label removal failed`,
+            "warn",
+          ),
+        );
     },
-    [activeFolderId, changeView],
+    [activeFolderId, changeView, client, pushActivity],
   );
 
   const persistTags = useCallback((next: Tag[]) => {
@@ -1156,9 +1312,17 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
       const tag = tagsRef.current.find((t) => t.id === id);
       persistTags(tagsRef.current.filter((t) => t.id !== id));
       if (activeTagId === id) changeView("inbox");
-      if (tag) pushActivity(`Deleted tag “${tag.name}”`, "info");
+      if (!tag) return;
+      // Mirror the delete to Gmail so the label doesn't get re-imported on the
+      // next sign-in. A failed delete (e.g. label already gone) is non-fatal.
+      void client
+        .deleteLabel(tag.labelId)
+        .then(() => pushActivity(`Deleted tag “${tag.name}”`, "info"))
+        .catch(() =>
+          pushActivity(`Deleted tag “${tag.name}” locally — Gmail label removal failed`, "warn"),
+        );
     },
-    [activeTagId, changeView, persistTags, pushActivity],
+    [activeTagId, changeView, client, persistTags, pushActivity],
   );
 
   const archiveThread = useCallback(
@@ -1207,11 +1371,11 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
       if (ids.length === 0) return;
       setBusy(`Moving ${ids.length}…`);
       try {
-        const labelId = await client.ensureLabelId(folder.name);
+        const labelId = await client.ensureLabelId(folderLabelName(folder.name));
         const removeLabelIds = ["INBOX"];
         const source = folders.find((f) => f.id === activeFolderId);
         if (source && source.id !== folder.id) {
-          removeLabelIds.push(await client.ensureLabelId(source.name));
+          removeLabelIds.push(await client.ensureLabelId(folderLabelName(source.name)));
         }
         const results = await Promise.allSettled(
           ids.map((id) => client.modifyThread(id, { addLabelIds: [labelId], removeLabelIds })),
@@ -1496,7 +1660,7 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
     async (name: string): Promise<Folder> => {
       const existing = folders.find((f) => f.name.toLowerCase() === name.toLowerCase());
       if (existing) return existing;
-      await client.ensureLabelId(name);
+      await client.ensureLabelId(folderLabelName(name));
       const folder: Folder = { id: crypto.randomUUID(), name };
       setFolders((prev) => {
         const next = [...prev, folder];
@@ -1593,7 +1757,7 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
           if (!action.folder) return { log: "" };
           const folder = await ensureFolder(action.folder);
           await moveThreadsToFolder(ids, folder);
-          const folderLabelId = await client.ensureLabelId(folder.name);
+          const folderLabelId = await client.ensureLabelId(folderLabelName(folder.name));
           const undo = async () => {
             await Promise.allSettled(
               ids.map((id) =>
@@ -1759,15 +1923,50 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
       };
       commitMessages((prev) => [...prev, userMsg]);
       setAssistantBusy(true);
-      try {
-        const output = await runAssist({
-          model,
-          endpoint: current.triageEndpoint,
-          mode,
-          message,
-          history,
-          context: await buildAssistantContext(relevantIds),
+      const streamId = crypto.randomUUID();
+      const streamMsgId = crypto.randomUUID();
+      // Live-render the reply as it streams: upsert a streaming assistant message
+      // in the current thread (state only — persisted once at finalize).
+      const onChunk = (partial: string) => {
+        if (!partial) return;
+        setAssistantThreads((prev) => {
+          const m = assistantModeRef.current;
+          const thread = prev[m];
+          const exists = thread.some((msg) => msg.id === streamMsgId);
+          const nextThread = exists
+            ? thread.map((msg) => (msg.id === streamMsgId ? { ...msg, content: partial } : msg))
+            : [
+                ...thread,
+                { id: streamMsgId, role: "assistant" as const, content: partial, ts: Date.now(), streaming: true },
+              ];
+          const next = { ...prev, [m]: nextThread };
+          assistantThreadsRef.current = next;
+          assistantMessagesRef.current = next[m];
+          return next;
         });
+      };
+      // Replace the streaming placeholder with the final message (or append it if
+      // nothing streamed), and persist.
+      const finalize = (patch: Partial<AssistantMessage> & { content: string }) => {
+        commitMessages((prev) =>
+          prev.some((m) => m.id === streamMsgId)
+            ? prev.map((m) => (m.id === streamMsgId ? { ...m, ...patch, streaming: false } : m))
+            : [...prev, { id: streamMsgId, role: "assistant", ts: Date.now(), streaming: false, ...patch }],
+        );
+      };
+      try {
+        const output = await runAssist(
+          {
+            model,
+            endpoint: current.triageEndpoint,
+            mode,
+            message,
+            history,
+            context: await buildAssistantContext(relevantIds),
+            streamId,
+          },
+          onChunk,
+        );
         // Target fallback for actions that didn't name ids: current selection,
         // else the open email ("this mail"), else the best keyword match.
         const fallbackIds =
@@ -1802,35 +2001,17 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
           output.reply?.trim() || (pending.length || nav.length ? "Done." : "…");
         if (mode === "agent" && pending.length > 0) {
           const undos = await executeActions(pending);
-          const msgId = crypto.randomUUID();
-          registerUndos(msgId, undos);
-          commitMessages((prev) => [
-            ...prev,
-            { id: msgId, role: "assistant", content: reply, ts: Date.now(), actions: pending, status: "applied" },
-          ]);
+          registerUndos(streamMsgId, undos);
+          finalize({ content: reply, actions: pending, status: "applied" });
         } else {
-          commitMessages((prev) => [
-            ...prev,
-            {
-              id: crypto.randomUUID(),
-              role: "assistant",
-              content: reply,
-              ts: Date.now(),
-              actions: pending.length ? pending : undefined,
-              status: pending.length ? "proposed" : undefined,
-            },
-          ]);
+          finalize({
+            content: reply,
+            actions: pending.length ? pending : undefined,
+            status: pending.length ? "proposed" : undefined,
+          });
         }
       } catch (err) {
-        commitMessages((prev) => [
-          ...prev,
-          {
-            id: crypto.randomUUID(),
-            role: "assistant",
-            content: `Sorry — I couldn't reach the model. ${errorMessage(err)}`,
-            ts: Date.now(),
-          },
-        ]);
+        finalize({ content: `Sorry, I couldn't reach the model. ${errorMessage(err)}` });
       } finally {
         setAssistantBusy(false);
       }
@@ -1901,6 +2082,39 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
     [],
   );
 
+  // Reopen a Gmail draft in the composer. Loads the thread, finds the latest
+  // message, and rehydrates a ComposeDraft from its headers + body. Looks up
+  // the matching Gmail draft id so Save updates the existing draft in place
+  // and Send replaces it with the sent message rather than leaving a duplicate
+  // behind.
+  const editDraft = useCallback(
+    async (threadId: string) => {
+      try {
+        const thread = await client.getThread(threadId);
+        const messages = (thread.messages ?? []).map(parseMessage);
+        const latest = messages[messages.length - 1];
+        if (!latest) {
+          pushActivity("Could not open draft: no message in thread", "warn");
+          return;
+        }
+        // Drafts.list returns { id, message: { id, threadId } } per entry —
+        // enough to map this thread → its Gmail draft id without further calls.
+        let draftId: string | undefined;
+        try {
+          const list = await client.listDrafts(200);
+          draftId = list.drafts?.find((d) => d.message?.threadId === threadId)?.id;
+        } catch {
+          // Non-fatal — without the id, send/save will fall back to a new draft.
+        }
+        setComposeError(null);
+        setCompose({ ...draftFromExisting(latest), draftId });
+      } catch (err) {
+        pushActivity(`Could not open draft: ${errorMessage(err)}`, "warn");
+      }
+    },
+    [client, pushActivity],
+  );
+
   // Open the composer on a fully-formed draft (used by Quick Action compose steps).
   const setComposeDraft = useCallback((draft: ComposeDraft) => {
     setComposeError(null);
@@ -1928,8 +2142,20 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
     setComposeError(null);
     try {
       await sendComposeDraft(compose);
+      // When this composer session began from an existing draft, drop the old
+      // draft so it doesn't linger in Drafts after the message has been sent.
+      if (compose.draftId) {
+        try {
+          await client.deleteDraft(compose.draftId);
+        } catch (err) {
+          // Non-fatal: the message went out. Surface the stale-draft state in
+          // the activity log so the user knows to clean it up if they care.
+          pushActivity(`Sent — could not remove old draft: ${errorMessage(err)}`, "warn");
+        }
+      }
       pushActivity(`Sent “${compose.subject || "(no subject)"}”`, "success");
       setCompose(null);
+      void refreshInbox();
     } catch (err) {
       const msg = errorMessage(err);
       setComposeError(
@@ -1940,22 +2166,30 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
     } finally {
       setComposeBusy(false);
     }
-  }, [compose, sendComposeDraft, pushActivity]);
+  }, [compose, sendComposeDraft, client, pushActivity, refreshInbox]);
 
   const saveComposeDraft = useCallback(async () => {
     if (!compose) return;
     setComposeBusy(true);
     setComposeError(null);
     try {
-      await saveDraftToGmail(client, compose, sessionRef.current.getEmail() ?? "");
+      if (compose.draftId) {
+        // Editing an existing Gmail draft — replace its contents in place so
+        // the list keeps a single entry instead of accumulating duplicates.
+        const raw = buildMime(compose, sessionRef.current.getEmail() ?? "");
+        await client.updateDraft(compose.draftId, raw);
+      } else {
+        await saveDraftToGmail(client, compose, sessionRef.current.getEmail() ?? "");
+      }
       pushActivity(`Saved draft “${compose.subject || "(no subject)"}”`, "info");
       setCompose(null);
+      void refreshInbox();
     } catch (err) {
       setComposeError(errorMessage(err));
     } finally {
       setComposeBusy(false);
     }
-  }, [compose, client, pushActivity]);
+  }, [compose, client, pushActivity, refreshInbox]);
 
   // ---- Quick Actions -----------------------------------------------------
 
@@ -2299,6 +2533,7 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
       canSend,
       composeNew,
       composeReply,
+      editDraft,
       updateCompose,
       closeCompose,
       sendCompose,
@@ -2399,6 +2634,7 @@ export function AugmentProvider({ children }: { children: ReactNode }): ReactEle
       canSend,
       composeNew,
       composeReply,
+      editDraft,
       updateCompose,
       closeCompose,
       sendCompose,

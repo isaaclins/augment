@@ -8,12 +8,14 @@ import { TagEditor } from "./TagEditor";
 import {
   ClockIcon,
   CloseIcon,
+  ExternalIcon,
   EyeIcon,
   FolderIcon,
   InboxIcon,
   MailIcon,
   PencilIcon,
   PlusIcon,
+  SendIcon,
   SettingsIcon,
   SlidersIcon,
   SparkleIcon,
@@ -30,9 +32,11 @@ const NAV: NavItem[] = [
   { id: "inbox", label: "Inbox", icon: <InboxIcon size={17} /> },
   { id: "snoozed", label: "Snoozed", icon: <ClockIcon size={17} /> },
   { id: "watching", label: "Watching", icon: <EyeIcon size={17} /> },
+  { id: "sent", label: "Sent", icon: <SendIcon size={17} /> },
+  { id: "drafts", label: "Drafts", icon: <PencilIcon size={17} /> },
   // Rules, Templates, and Quick Actions are configuration, not daily views —
   // one "Setup" entry opens them as tabs (see SetupView). The id stays "rules"
-  // so ⌘4 and the keybind chip keep working.
+  // so its keybind chip keeps working.
   { id: "rules", label: "Setup", icon: <SlidersIcon size={17} /> },
 ];
 
@@ -140,7 +144,7 @@ export function Sidebar() {
 
         <div className="folder-list">
           {folders.length === 0 && !adding && (
-            <div className="folder-empty">No folders yet.</div>
+            <div className="folder-empty">No folders. Add one with +</div>
           )}
           {folders.map((folder) => {
             const active = view === "folder" && activeFolderId === folder.id;
@@ -184,7 +188,7 @@ export function Sidebar() {
         </div>
 
         <div className="tag-list">
-          {tags.length === 0 && <div className="folder-empty">No tags yet.</div>}
+          {tags.length === 0 && <div className="folder-empty">No tags. Add one with +</div>}
           {tags.map((tag) => {
             const active = view === "tag" && activeTagId === tag.id;
             return (
@@ -240,15 +244,33 @@ export function Sidebar() {
       </button>
 
       <div className="sidebar-account">
-        <div className="account-email" title={email ?? ""}>
-          {email ?? "Not signed in"}
+        <div className="account-avatar" aria-hidden>{initialsFromEmail(email)}</div>
+        <div className="account-info">
+          <span className="account-label">Signed in</span>
+          <span className="account-email" title={email ?? ""}>
+            {email ?? "Not signed in"}
+          </span>
         </div>
-        <button className="link-btn" type="button" onClick={signOut}>
-          Sign out
+        <button
+          className="icon-btn account-signout"
+          type="button"
+          onClick={signOut}
+          title="Sign out"
+          aria-label="Sign out"
+        >
+          <ExternalIcon size={14} />
         </button>
       </div>
 
       {tagEditor && <TagEditor initial={tagEditor.tag} onClose={() => setTagEditor(null)} />}
     </aside>
   );
+}
+
+function initialsFromEmail(email: string | null): string {
+  if (!email) return "?";
+  const local = email.split("@")[0] ?? "";
+  const parts = local.split(/[._-]/).filter(Boolean);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return (local.slice(0, 2) || "?").toUpperCase();
 }

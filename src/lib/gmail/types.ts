@@ -29,6 +29,12 @@ export interface GmailDraft {
   message?: GmailMessage;
 }
 
+export interface GmailDraftsListResponse {
+  drafts?: GmailDraft[];
+  nextPageToken?: string;
+  resultSizeEstimate?: number;
+}
+
 export interface GmailHistoryRecord {
   id: string;
   messagesAdded?: { message: GmailMessageRef }[];
@@ -103,5 +109,6 @@ export const SystemLabel = {
   Unread: "UNREAD",
   Starred: "STARRED",
   Sent: "SENT",
+  Draft: "DRAFT",
   Important: "IMPORTANT",
 } as const;

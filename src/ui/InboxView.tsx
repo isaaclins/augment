@@ -23,6 +23,7 @@ import {
   MailIcon,
   PencilIcon,
   RefreshIcon,
+  SendIcon,
   SparkleIcon,
   TagIcon,
 } from "./icons";
@@ -101,6 +102,8 @@ export function InboxView() {
     clearFilter,
     selectedId,
     openThread,
+    closeThread,
+    editDraft,
     refresh,
     loadMore,
     hasMore,
@@ -286,13 +289,22 @@ export function InboxView() {
         if (target?.closest('input, textarea, [contenteditable="true"], .reader')) return;
         event.preventDefault();
         selectAll();
-      } else if (event.key === "Escape" && selectedIds.size > 0) {
-        clearSelection();
+      } else if (event.key === "Escape") {
+        const target = event.target as HTMLElement | null;
+        // Let inline editors handle their own Escape (blur, cancel).
+        if (target?.closest('input, textarea, [contenteditable="true"]')) return;
+        // Let a foreground modal/overlay own Escape (composer, context menu).
+        if (document.querySelector(".modal-backdrop, .context-menu")) return;
+        if (selectedIds.size > 0) {
+          clearSelection();
+        } else if (selectedId) {
+          closeThread();
+        }
       }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [selectAll, clearSelection, selectedIds.size]);
+  }, [selectAll, clearSelection, closeThread, selectedId, selectedIds.size]);
 
   return (
     <div className="inbox">
@@ -388,19 +400,35 @@ export function InboxView() {
                   <FolderIcon size={24} />
                 ) : view === "tag" ? (
                   <TagIcon size={24} />
+                ) : view === "sent" ? (
+                  <SendIcon size={24} />
+                ) : view === "drafts" ? (
+                  <PencilIcon size={24} />
                 ) : (
                   <MailIcon size={24} />
                 )}
               </span>
               <p className="empty-state-title">
-                {view === "folder" ? "Empty folder" : view === "tag" ? "No tagged mail" : "Inbox zero"}
+                {view === "folder"
+                  ? "Empty folder"
+                  : view === "tag"
+                    ? "No tagged mail"
+                    : view === "sent"
+                      ? "Nothing sent yet"
+                      : view === "drafts"
+                        ? "No drafts"
+                        : "Inbox zero"}
               </p>
               <p className="empty-state-text">
                 {view === "folder"
                   ? "Nothing filed here yet. Move threads in from the inbox."
                   : view === "tag"
                     ? "Tag a thread and it will show up here."
-                    : "You are all caught up. New mail lands here."}
+                    : view === "sent"
+                      ? "Mail you send from Augment will appear here."
+                      : view === "drafts"
+                        ? "Messages you save as drafts will appear here."
+                        : "You are all caught up. New mail lands here."}
               </p>
             </div>
           )}
@@ -418,13 +446,14 @@ export function InboxView() {
               Boolean(catName) &&
               catName!.toLowerCase() !== "other" &&
               !(catTag && row.labelIds.includes(catTag.labelId));
+            const isDraft = row.labelIds.includes("DRAFT");
             return (
               <button
                 key={row.id}
                 type="button"
                 className={`row ${row.id === selectedId ? "row-active" : ""} ${
                   selectedIds.has(row.id) ? "row-selected" : ""
-                } ${row.unread ? "row-unread" : ""}`}
+                } ${row.unread ? "row-unread" : ""} ${isDraft ? "row-draft" : ""}`}
                 onClick={(event) => {
                   if (event.shiftKey) {
                     selectRange(row.id);
@@ -432,6 +461,10 @@ export function InboxView() {
                   }
                   if (event.metaKey || event.ctrlKey) {
                     toggleSelected(row.id);
+                    return;
+                  }
+                  if (isDraft) {
+                    void editDraft(row.id);
                     return;
                   }
                   void openThread(row.id);
@@ -443,7 +476,10 @@ export function InboxView() {
                 </span>
                 <div className="row-body">
                   <div className="row-top">
-                    <span className="row-from">{addressLabel(row.from)}</span>
+                    <span className="row-from">
+                      {isDraft && <span className="row-draft-badge">DRAFT</span>}
+                      {addressLabel(row.from) || (isDraft ? "(no recipient)" : "")}
+                    </span>
                     <span className="row-date">{formatListDate(row.date)}</span>
                   </div>
                   <div className="row-subject">

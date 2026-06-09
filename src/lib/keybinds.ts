@@ -5,12 +5,14 @@
 // keypress, so capture and matching can never drift apart.
 
 /** Views reachable by a configurable shortcut. */
-export type NavAction = "inbox" | "snoozed" | "watching" | "rules";
+export type NavAction = "inbox" | "snoozed" | "watching" | "sent" | "drafts" | "rules";
 
 export const NAV_ACTIONS: { id: NavAction; label: string }[] = [
   { id: "inbox", label: "Inbox" },
   { id: "snoozed", label: "Snoozed" },
   { id: "watching", label: "Watching" },
+  { id: "sent", label: "Sent" },
+  { id: "drafts", label: "Drafts" },
   // The id stays "rules" (view key + stored keybind), but it opens the merged
   // Setup view, so the shortcut is labelled "Setup" to match the sidebar.
   { id: "rules", label: "Setup" },
@@ -23,6 +25,8 @@ export const DEFAULT_KEYBINDS: Keybinds = {
   snoozed: "mod+2",
   watching: "mod+3",
   rules: "mod+4",
+  sent: "mod+5",
+  drafts: "mod+6",
 };
 
 export const isMac =
