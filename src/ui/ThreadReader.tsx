@@ -1,13 +1,23 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useAugment } from "../state/augment";
 import { addressLabel, type ParsedMessage } from "../lib/gmail/parse";
-import { formatDateTime } from "../lib/time";
+import { formatDateTime, formatRelative } from "../lib/time";
 import { SNOOZE_PRESETS, WATCH_PRESETS } from "../lib/time";
+import { formatCombo } from "../lib/keybinds";
 import { EmailView } from "./EmailView";
 import { DurationMenu } from "./DurationMenu";
 import { Avatar } from "./Avatar";
 import { useClickOutside } from "./hooks";
-import { ArchiveIcon, ClockIcon, CloseIcon, EyeIcon, MailIcon } from "./icons";
+import {
+  ArchiveIcon,
+  ClockIcon,
+  CloseIcon,
+  EyeIcon,
+  InboxIcon,
+  MailIcon,
+  PencilIcon,
+  SparkleIcon,
+} from "./icons";
 
 // The "⋯" overflow for secondary reader actions (Reply all / Forward / Open in
 // Gmail) so the bar leads with the triage actions (UI-AUDIT H3).
@@ -80,17 +90,7 @@ export function ThreadReader() {
   }, [threadId, activeIndex]);
 
   if (!selectedId) {
-    return (
-      <div className="reader reader-empty">
-        <div className="empty-state">
-          <span className="empty-state-icon">
-            <MailIcon size={24} />
-          </span>
-          <p className="empty-state-title">No conversation open</p>
-          <p className="empty-state-text">Select a thread on the left to read it here.</p>
-        </div>
-      </div>
-    );
+    return <DashboardEmpty />;
   }
 
   if (!reader || reader.loading) {
@@ -202,4 +202,172 @@ export function ThreadReader() {
       />
     </div>
   );
+}
+
+// Shown when no thread is open. Replaces the bare "no conversation" stub with a
+// quick glance dashboard: greeting, four counters that double as navigation,
+// the next snoozed/watching item coming back, and keyboard shortcut hints.
+function DashboardEmpty() {
+  const {
+    email,
+    rows,
+    schedule,
+    suggestions,
+    setView,
+    setAssistantOpen,
+    composeNew,
+    openThread,
+    settings,
+  } = useAugment();
+
+  const unreadCount = rows.filter((r) => r.unread).length;
+  const snoozed = schedule.filter((s) => s.kind === "snooze");
+  const watching = schedule.filter((s) => s.kind === "watch");
+  const suggestionCount = suggestions.length;
+  const nextDue = [...snoozed, ...watching].sort((a, b) => a.dueAt - b.dueAt)[0];
+
+  const greeting = greetingFor(new Date().getHours());
+  const displayName = firstName(email);
+  const keybinds = settings.keybinds as Record<string, string | undefined>;
+
+  return (
+    <div className="reader reader-dash">
+      <div className="dash">
+        <header className="dash-head">
+          <div className="dash-eyebrow">
+            <span className="signin-dot" aria-hidden />
+            <span>TODAY</span>
+            <span className="signin-eyebrow-sep" aria-hidden>·</span>
+            <span>{formatToday()}</span>
+          </div>
+          <h1 className="dash-greeting">
+            {greeting}
+            {displayName ? <span className="dash-name">, {displayName}</span> : null}.
+          </h1>
+          <p className="dash-sub">
+            Pick a thread on the left to read it here — or jump straight to something below.
+          </p>
+        </header>
+
+        <div className="dash-stats">
+          <DashStat
+            icon={<InboxIcon size={16} />}
+            value={unreadCount}
+            label="Unread"
+            onClick={() => setView("inbox")}
+          />
+          <DashStat
+            icon={<SparkleIcon size={16} />}
+            value={suggestionCount}
+            label="Suggestions"
+            disabled={suggestionCount === 0}
+            onClick={() => setAssistantOpen(true)}
+          />
+          <DashStat
+            icon={<ClockIcon size={16} />}
+            value={snoozed.length}
+            label="Snoozed"
+            disabled={snoozed.length === 0}
+            onClick={() => setView("snoozed")}
+          />
+          <DashStat
+            icon={<EyeIcon size={16} />}
+            value={watching.length}
+            label="Watching"
+            disabled={watching.length === 0}
+            onClick={() => setView("watching")}
+          />
+        </div>
+
+        {nextDue && (
+          <button
+            className="dash-next"
+            type="button"
+            onClick={() => void openThread(nextDue.threadId)}
+            title="Open this thread"
+          >
+            <span className="dash-next-kind">
+              {nextDue.kind === "snooze" ? <ClockIcon size={13} /> : <EyeIcon size={13} />}
+              <span>{nextDue.kind === "snooze" ? "Coming back" : "Watching"}</span>
+            </span>
+            <span className="dash-next-subject">{nextDue.subject || "(no subject)"}</span>
+            <span className="dash-next-when">{formatRelative(nextDue.dueAt)}</span>
+          </button>
+        )}
+
+        <div className="dash-actions">
+          <button className="btn btn-primary dash-cta" type="button" onClick={composeNew}>
+            <PencilIcon size={14} />
+            <span>New message</span>
+          </button>
+          <div className="dash-shortcuts">
+            <DashShortcut combo={keybinds.inbox ?? "mod+1"} label="Inbox" />
+            <DashShortcut combo={keybinds.snoozed ?? "mod+2"} label="Snoozed" />
+            <DashShortcut combo={keybinds.watching ?? "mod+3"} label="Watching" />
+            <DashShortcut combo={keybinds.search ?? "mod+k"} label="Search" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DashStat({
+  icon,
+  value,
+  label,
+  onClick,
+  disabled,
+}: {
+  icon: ReactNode;
+  value: number;
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      className={`dash-stat${value > 0 ? " is-live" : ""}`}
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+    >
+      <span className="dash-stat-icon" aria-hidden>{icon}</span>
+      <span className="dash-stat-num">{value}</span>
+      <span className="dash-stat-label">{label}</span>
+    </button>
+  );
+}
+
+function DashShortcut({ combo, label }: { combo: string; label: string }) {
+  return (
+    <span className="dash-shortcut">
+      <kbd>{formatCombo(combo)}</kbd>
+      <span>{label}</span>
+    </span>
+  );
+}
+
+function greetingFor(hour: number): string {
+  if (hour < 5) return "Still up";
+  if (hour < 12) return "Good morning";
+  if (hour < 17) return "Good afternoon";
+  if (hour < 22) return "Good evening";
+  return "Late one";
+}
+
+function firstName(email: string | null): string | null {
+  if (!email) return null;
+  const local = email.split("@")[0] ?? "";
+  const first = local.split(/[._-]/)[0] ?? "";
+  if (!first) return null;
+  return first.charAt(0).toUpperCase() + first.slice(1);
+}
+
+function formatToday(): string {
+  return new Date().toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
 }

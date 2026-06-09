@@ -2,9 +2,11 @@
 // subject, a plain-text body, and file attachments. Send goes out via Gmail
 // (gmail.send); Save draft stores it in Drafts. A reply stays in its thread.
 
-import { useRef, type ChangeEvent } from "react";
+import { useEffect, useRef, type ChangeEvent } from "react";
 import { useAugment } from "../state/augment";
 import { fileToAttachment, type ComposeMode } from "../lib/features/compose";
+import { htmlToText } from "../lib/gmail/parse";
+import { RichTextEditor } from "./RichTextEditor";
 import { CloseIcon, FileIcon } from "./icons";
 
 const MODE_TITLE: Record<ComposeMode, string> = {
@@ -32,6 +34,15 @@ export function Composer() {
     saveComposeDraft,
   } = useAugment();
   const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!compose) return;
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") closeCompose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [compose, closeCompose]);
 
   if (!compose) return null;
 
@@ -103,12 +114,13 @@ export function Composer() {
             />
           </label>
 
-          <textarea
-            className="composer-textarea"
-            value={compose.body}
-            placeholder="Write your message…"
-            onChange={(e) => updateCompose({ body: e.target.value })}
-          />
+          <div className="composer-richtext">
+            <RichTextEditor
+              initialHtml={compose.bodyHtml}
+              placeholder="Write your message…"
+              onChange={(html) => updateCompose({ bodyHtml: html, body: htmlToText(html) })}
+            />
+          </div>
 
           {compose.attachments.length > 0 && (
             <div className="composer-attachments">
