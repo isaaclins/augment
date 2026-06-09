@@ -11,7 +11,7 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
 
 use crate::error::AppError;
 use crate::AppState;
@@ -174,6 +174,9 @@ pub struct AssistInput {
     pub history: Vec<ChatTurn>,
     #[serde(default)]
     pub context: String,
+    /// Correlates the streamed `assist-stream` events with this call.
+    #[serde(default)]
+    pub stream_id: String,
 }
 
 #[derive(Serialize)]
@@ -187,6 +190,7 @@ pub struct AssistOutput {
 /// execute — one structured call, no tool-calling loop.
 #[tauri::command]
 pub async fn ollama_assist(
+    app: AppHandle,
     state: State<'_, AppState>,
     input: AssistInput,
 ) -> Result<AssistOutput, AppError> {
@@ -287,13 +291,13 @@ pub async fn ollama_assist(
 
     let body = json!({
         "model": input.model,
-        "stream": false,
+        "stream": true,
         "format": schema,
         "options": { "temperature": 0 },
         "messages": messages
     });
 
-    let response = state
+    let mut response = state
         .http
         .post(&url)
         .json(&body)
@@ -310,8 +314,48 @@ pub async fn ollama_assist(
         )));
     }
 
-    let chat: ChatResponse = response.json().await?;
-    let parsed: serde_json::Value = serde_json::from_str(chat.message.content.trim())
+    // Ollama streams NDJSON: one JSON object per line, each carrying a
+    // `message.content` delta. Accumulate the content and emit the growing string
+    // so the webview can render the reply token-by-token.
+    fn delta_of(line: &str) -> Option<String> {
+        serde_json::from_str::<serde_json::Value>(line).ok().and_then(|value| {
+            value
+                .get("message")
+                .and_then(|m| m.get("content"))
+                .and_then(|c| c.as_str())
+                .map(str::to_string)
+        })
+    }
+
+    let mut buffer = String::new();
+    let mut content = String::new();
+    while let Some(chunk) = response.chunk().await? {
+        buffer.push_str(&String::from_utf8_lossy(&chunk));
+        while let Some(nl) = buffer.find('\n') {
+            let line: String = buffer.drain(..=nl).collect();
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            if let Some(delta) = delta_of(trimmed) {
+                if !delta.is_empty() {
+                    content.push_str(&delta);
+                    let _ = app.emit(
+                        "assist-stream",
+                        json!({ "id": input.stream_id, "content": content }),
+                    );
+                }
+            }
+        }
+    }
+    let tail = buffer.trim();
+    if !tail.is_empty() {
+        if let Some(delta) = delta_of(tail) {
+            content.push_str(&delta);
+        }
+    }
+
+    let parsed: serde_json::Value = serde_json::from_str(content.trim())
         .map_err(|err| AppError::Ollama(format!("could not parse assistant output: {err}")))?;
 
     let reply = parsed
