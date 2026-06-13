@@ -43,11 +43,12 @@ the item within one tick). *This replaced an earlier emit-once design — see th
 request or script execution. Defense in depth is the whole point of the "never fetch
 remote content" requirement.
 
-### D5 — Tokens in memory only; re-auth each launch
-The access token sits in webview memory; the refresh token sits in a Rust `Mutex` for
-the session and is **never written to disk**. **Why:** the spec mandates it, and it
-neatly sidesteps refresh-token rot — including Google's 7-day testing-mode refresh
-expiry, which never matters because we always start fresh.
+### D5 — Access token in memory; refresh token in the OS keychain
+The access token sits in webview memory; the refresh token sits in a Rust `Mutex` and
+is mirrored to the OS-native secure store so Augment can restore the session on
+launch. **Why:** desktop users expect to stay signed in, but the token still should
+not live in plaintext app data. Sign-out clears both the in-memory value and the
+stored credential.
 
 ### D6 — OAuth: loopback + PKCE (S256), Desktop client
 A `TcpListener` on `127.0.0.1:0` (ephemeral port) catches the redirect; PKCE S256 +
@@ -56,11 +57,11 @@ on any port automatically, so no redirect URI registration is needed. The client
 is included in the exchange when present but PKCE makes it non-critical. OOB is
 deprecated; loopback is the supported path.
 
-### D7 — Only non-destructive Gmail actions
-Scope is `gmail.modify` (read + label + archive). Send / permanent-delete / mark-spam
-are impossible with this scope — the safety requirement is enforced by the grant itself,
-not just by UI discipline. Archive = remove the `INBOX` label; snooze = archive + add
-`Augment/Snoozed`.
+### D7 — Explicit send; no permanent delete or spam
+Scope is `gmail.modify gmail.send` (read + label + archive + Trash + composer send).
+Permanent-delete and mark-spam stay impossible because the app never requests those
+scopes or exposes those endpoints. Archive = remove the `INBOX` label; snooze =
+archive + add `Augment/Snoozed`; Trash is reversible in Gmail.
 
 ## Implementation choices
 
@@ -104,7 +105,5 @@ side effects. **Why:** the matching logic — the part most likely to have edge-
 
 ## Deferred to v2
 
-- Always-on background daemon so snooze/watch fire while the app is closed.
-- Opt-in "load remote images" toggle (kept fully blocked in v1 by design).
-- Multiple accounts; full-text search; compose/reply (would need broader scopes +
-  in-app confirmation per the destructive-action rule).
+- Launch-at-login helper / always-on daemon so snooze/watch fire after a full quit.
+- Multiple accounts and richer assistant progress controls.

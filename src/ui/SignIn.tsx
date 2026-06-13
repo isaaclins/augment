@@ -172,13 +172,14 @@ function ConnectStep({
             <li><span className="signin-perm-yes" aria-hidden><CheckIcon size={11} /></span>Read messages to run rules</li>
             <li><span className="signin-perm-yes" aria-hidden><CheckIcon size={11} /></span>Add and remove labels</li>
             <li><span className="signin-perm-yes" aria-hidden><CheckIcon size={11} /></span>Archive messages</li>
+            <li><span className="signin-perm-yes" aria-hidden><CheckIcon size={11} /></span>Send from composer or Quick Actions</li>
           </ul>
         </div>
         <div className="signin-perms-col">
           <p className="signin-perms-label">Never will</p>
           <ul className="signin-perm-list">
-            <li><span className="signin-perm-no" aria-hidden><CloseIcon size={11} /></span>Send mail as you</li>
-            <li><span className="signin-perm-no" aria-hidden><CloseIcon size={11} /></span>Delete messages</li>
+            <li><span className="signin-perm-no" aria-hidden><CloseIcon size={11} /></span>Send without your action</li>
+            <li><span className="signin-perm-no" aria-hidden><CloseIcon size={11} /></span>Permanently delete messages</li>
             <li><span className="signin-perm-no" aria-hidden><CloseIcon size={11} /></span>Mark messages spam</li>
           </ul>
         </div>
@@ -209,8 +210,8 @@ function ConnectStep({
       )}
 
       <p className="signin-foot">
-        Augment requests the <code>gmail.modify</code> scope. Your sign-in is saved
-        in your system keychain so you stay logged in across launches.
+        Augment requests <code>gmail.modify</code> and <code>gmail.send</code>. Your sign-in
+        is saved in your system keychain so you stay logged in across launches.
       </p>
     </>
   );

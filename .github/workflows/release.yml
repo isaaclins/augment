@@ -41,6 +41,16 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test frontend
+        run: npm run test
+
+      - name: Test Rust
+        working-directory: src-tauri
+        run: cargo test
+
       - name: Build app and publish release
         uses: tauri-apps/tauri-action@v0
         env:

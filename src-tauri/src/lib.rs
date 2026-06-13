@@ -16,7 +16,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Manager, RunEvent, State, WindowEvent};
 
 use error::AppError;
 
@@ -88,8 +88,19 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .menu(|handle| menu::build(handle))
         .on_menu_event(|app, event| {
-            if event.id().as_ref() == menu::SETTINGS_MENU_ID {
-                menu::open_settings(app);
+            match event.id().as_ref() {
+                menu::SETTINGS_MENU_ID => menu::open_settings(app),
+                menu::SHOW_MAIN_MENU_ID => menu::show_main(app),
+                menu::QUIT_MENU_ID => app.exit(0),
+                _ => {}
+            }
+        })
+        .on_window_event(|window, event| {
+            if window.label() == "main" {
+                if let WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
             }
         })
         .setup(|app| {
@@ -117,6 +128,7 @@ pub fn run() {
                 oauth_cancel: Arc::new(AtomicBool::new(false)),
             });
 
+            menu::install_tray(handle)?;
             scheduler::spawn_ticker(handle.clone());
             Ok(())
         })
@@ -134,6 +146,16 @@ pub fn run() {
             ollama::ollama_health,
             ollama::ollama_assist,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running Augment");
+        .build(tauri::generate_context!())
+        .expect("error while building Augment")
+        .run(|app, event| {
+            #[cfg(target_os = "macos")]
+            if let RunEvent::Reopen {
+                has_visible_windows: false,
+                ..
+            } = event
+            {
+                menu::show_main(app);
+            }
+        });
 }

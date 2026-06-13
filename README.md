@@ -72,12 +72,14 @@ truth; Augment layers the power features other clients paywall — a rules engin
 snooze, watch-for-reply, AI triage, quick actions, and native macOS notifications —
 directly on top.
 
-It talks to the Gmail REST API from the TypeScript layer with an in-memory OAuth
-token, renders mail with **zero remote content**, and uses a small Rust backend
-only for the background scheduler, native notifications, and OAuth glue.
+It talks to the Gmail REST API from the TypeScript layer with an in-memory access
+token, stores the refresh token in the OS keychain, renders mail with **remote
+content blocked by default**, and uses a small Rust backend only for the
+background scheduler, native notifications, secure storage, and OAuth glue.
 
-The OAuth scope is `gmail.modify` — read, label, archive. Augment never sends,
-permanently deletes, or marks spam.
+The OAuth scopes are `gmail.modify` and `gmail.send`: read, label, archive,
+move to Trash, save drafts, and send mail from the composer or user-created
+Quick Actions. Augment never permanently deletes mail or marks spam.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -143,8 +145,9 @@ After **Sign in with Google** (a browser tab opens — approve, then return):
 | **Watch for reply** | If no inbound reply arrives by the deadline, a macOS notification fires. |
 | **AI triage** | Local Ollama model labels each thread; invented labels surface as approvals in the Assistant panel. |
 | **Assistant** | Right-side chat panel — Ask / Request / Agent modes, acting on selection. |
-| **Quick Actions** | User-defined macros (shortcut → ordered steps: tag, move, mark, snooze, compose, …). |
-| **Private rendering** | Email renders as plaintext or HTML stripped of all remote content, inside a sandboxed iframe. |
+| **Quick Actions** | User-defined macros (shortcut → ordered steps: tag, move, mark, snooze, compose, send, …). |
+| **Private rendering** | Email renders as plaintext or sanitized HTML in a sandboxed iframe. Remote images are blocked until allowed per-email or per-sender. |
+| **Background mode** | Closing the main window hides it instead of quitting, so snooze/watch checks keep running while Augment remains open in the menu bar. |
 
 ### Build a release
 
@@ -174,7 +177,8 @@ cd src-tauri && cargo test   # Rust
 - [x] Sort / filter view state
 - [x] Assistant panel (Ask / Request / Agent)
 - [x] Quick Actions + composer
-- [ ] Always-on background scheduler daemon (currently fires only while app is open)
+- [x] Background scheduler mode while the app remains running
+- [ ] Launch-at-login helper / always-on daemon for checks after a full quit
 - [ ] Chunked agent loop with progress + Stop (lift the 40-row context cap)
 - [ ] Cross-platform builds (currently macOS only)
 

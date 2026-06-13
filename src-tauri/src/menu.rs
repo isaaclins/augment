@@ -9,11 +9,16 @@
 
 use tauri::{
     menu::{AboutMetadataBuilder, Menu, MenuBuilder, MenuItemBuilder, SubmenuBuilder},
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, Manager, Runtime, WebviewUrl, WebviewWindowBuilder,
 };
 
 /// Menu item id for the Settings command (matched in the menu-event handler).
 pub const SETTINGS_MENU_ID: &str = "augment.settings";
+/// Menu item id for showing the main window from the tray/menu bar.
+pub const SHOW_MAIN_MENU_ID: &str = "augment.show-main";
+/// Menu item id for a deliberate full app quit from the tray/menu bar.
+pub const QUIT_MENU_ID: &str = "augment.quit";
 /// Window label for the dedicated settings window.
 pub const SETTINGS_WINDOW_LABEL: &str = "settings";
 
@@ -65,6 +70,54 @@ pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
     MenuBuilder::new(app)
         .items(&[&app_menu, &edit_menu, &window_menu])
         .build()
+}
+
+/// Show the main window after it has been hidden to keep background schedules
+/// alive. Used by the tray icon/menu and app activation events.
+pub fn show_main<R: Runtime>(app: &AppHandle<R>) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+    }
+}
+
+/// Install a small tray/menu-bar affordance so closing Augment can hide the
+/// window while the process keeps running scheduled snooze/watch checks.
+pub fn install_tray<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
+    let show_item = MenuItemBuilder::new("Show Augment")
+        .id(SHOW_MAIN_MENU_ID)
+        .build(app)?;
+    let settings_item = MenuItemBuilder::new("Settings…")
+        .id(SETTINGS_MENU_ID)
+        .build(app)?;
+    let quit_item = MenuItemBuilder::new("Quit Augment")
+        .id(QUIT_MENU_ID)
+        .build(app)?;
+    let tray_menu = MenuBuilder::new(app)
+        .items(&[&show_item, &settings_item, &quit_item])
+        .build()?;
+
+    let mut tray = TrayIconBuilder::new()
+        .menu(&tray_menu)
+        .show_menu_on_left_click(false)
+        .tooltip("Augment")
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
+                show_main(tray.app_handle());
+            }
+        });
+
+    if let Some(icon) = app.default_window_icon().cloned() {
+        tray = tray.icon(icon);
+    }
+
+    tray.build(app).map(|_| ())
 }
 
 /// Show the settings window, creating it on first use. Reused on subsequent

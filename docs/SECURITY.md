@@ -5,7 +5,7 @@
 ```
 ┌─────────────────────────── Tauri window (WKWebView) ───────────────────────────┐
 │  React + TypeScript (strict)                                                    │
-│    • Gmail REST client  (threads, labels, modify)  ── all mail data lives here  │
+│    • Gmail REST client  (threads, labels, drafts, send) ─ all mail data lives here │
 │    • Sanitizer (DOMPurify + sandboxed iframe CSP)                                │
 │    • Rules engine (pure, unit-tested)                                            │
 │    • UI: sign-in · inbox · reader · rules · snoozed · watching                  │
@@ -13,7 +13,7 @@
 └────────────┼───────────────────────────────────────────┼───────────────────────┘
              ▼                                            │ "schedule-due"
 ┌──────────── Rust backend (narrow on purpose) ───────────┴──────────────────────┐
-│   • OAuth loopback + PKCE  (start_oauth / refresh_access_token)                 │
+│   • OAuth loopback + PKCE + Keychain refresh token storage                      │
 │   • Scheduler tick (tokio) + JSON store in app-data  (schedule_add/list/remove) │
 │   • Native notifications  (notify)                                              │
 └────────────────────────────────────────────────────────────────────────────────┘
@@ -34,34 +34,42 @@ one place and the notification is always a real macOS banner.
 ### Tokens
 
 - The **access token** lives in webview memory.
-- The **refresh token** lives in Rust process memory for the session and is
-  **never written to disk**.
-- Augment re-authenticates on each launch (intentional — sidesteps token rot).
+- The **refresh token** lives in Rust process memory and is mirrored to the
+  OS-native secure store (macOS Keychain / Windows Credential Manager) so the
+  session survives relaunch. It is never written as plaintext app data.
+- Signing out clears the in-memory refresh token and the stored Keychain entry.
 - OAuth uses **PKCE (S256)** over a loopback redirect with a CSRF `state` check.
 
-### No remote content, ever
+### Remote content blocked by default
 
 Mail rendering is defense-in-depth:
 
 1. **DOMPurify** removes scripts, event handlers, and dangerous tags, and hooks
    strip every remote-loading vector — `img/src`, `srcset`, `poster`,
-   `background`, and `url(...)` in inline styles. Only `data:` images survive.
+   `background`, and `url(...)` in inline styles. Only `data:` images survive
+   until the user explicitly allows remote images for one email or sender.
 2. The sanitized body is rendered inside a **sandboxed `<iframe srcdoc>`** whose
-   own `<meta>` CSP is `default-src 'none'; img-src data:; …` — so even a
-   sanitizer bypass cannot reach the network or run a script.
-3. The **app-level CSP** (`tauri.conf.json`) is the outermost backstop: `img-src
-   'self' data:`, `connect-src` limited to the Gmail API hosts.
+   own `<meta>` CSP is `default-src 'none'; img-src data:; …` by default. When
+   remote images are allowed, the iframe permits `http:`/`https:` images only;
+   scripts, frames, forms, and connections stay blocked.
+3. The **app-level CSP** (`tauri.conf.json`) still blocks scripts, frames, forms,
+   objects, and arbitrary connections. It permits `http:`/`https:` images so the
+   reader's explicit per-email/per-sender opt-in can work; the sanitizer and
+   iframe CSP decide whether any email image reference survives to that point.
 
 **Verifying it yourself:** open a marketing email with tracking pixels, then in
 the Tauri webview devtools (right-click → Inspect) watch the **Network** tab —
-opening the email issues no requests to image/tracker hosts. The reader also
-shows a "🛡️ N remote items blocked" badge.
+opening the email issues no requests to image/tracker hosts until you click
+"Allow these" or "Allow from sender." The reader also shows a blocked-items
+badge.
 
-### No destructive actions
+### Explicit mail-changing actions
 
-The OAuth scope is `https://www.googleapis.com/auth/gmail.modify` — only label,
-archive, mark-read, and star are ever performed. Send, permanent delete, and
-mark-spam are out of scope by construction.
+The OAuth scopes are `https://www.googleapis.com/auth/gmail.modify` and
+`https://www.googleapis.com/auth/gmail.send`. Augment can read mail, add/remove
+labels, archive, star, mark read/unread, move threads to Trash, save drafts, and
+send mail through the composer or an explicit Quick Action configured by the
+user.
 
-> Quick Actions / in-app compose would require broadening to `gmail.send` or
-> `gmail.compose`. That is intentionally not enabled in the shipped scope.
+Permanent deletion and spam-reporting are still out of scope by construction.
+Trash is reversible in Gmail; permanent delete is not exposed.

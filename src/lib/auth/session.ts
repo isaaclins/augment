@@ -1,6 +1,7 @@
 // In-memory session. Holds the access token (and derived expiry) for the life
-// of the window only — nothing is persisted. The GmailClient reads the token
-// through `getToken`, and refreshes through `refresh` on a 401.
+// of the window only. The Rust backend persists only the refresh token in the
+// OS-native secure store. The GmailClient reads the access token through
+// `getToken`, and refreshes through `refresh` on a 401.
 
 import type { OauthResult } from "./commands";
 

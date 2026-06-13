@@ -2,8 +2,8 @@
 //! and PKCE (S256). This is "secure glue": it runs a one-shot localhost server
 //! to catch the redirect, exchanges the authorization code for tokens, and hands
 //! the *access* token to the frontend. The refresh token is kept in process
-//! memory for the lifetime of the session and is never written to disk — by
-//! design, this sidesteps long-term token rot (we simply re-auth each launch).
+//! memory and mirrored to the OS-native secure store so the session can survive
+//! app restarts without storing secrets in plaintext app data.
 
 use std::io::{Read, Write};
 use std::net::TcpListener;

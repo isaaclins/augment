@@ -1,12 +1,13 @@
 // Safe rendering of untrusted email HTML. Defense in depth:
 //
 //  1. DOMPurify strips scripts, event handlers, and dangerous tags.
-//  2. Hooks here neutralize every *remote-loading* vector — img/src, srcset,
-//     poster, background, and url(...) inside inline styles — so only data:
-//     URIs survive. Nothing in a rendered email can reach the network.
+//  2. By default, hooks here neutralize every *remote-loading* vector — img/src,
+//     srcset, poster, background, and url(...) inside inline styles — so only
+//     data: URIs survive.
 //  3. The result is wrapped in a sandboxed <iframe srcdoc> (see EmailView) whose
-//     own <meta> CSP is `default-src 'none'`, which blocks network + scripts
-//     even if a sanitizer bypass ever slipped through.
+//     own <meta> CSP is `default-src 'none'`, which blocks network + scripts.
+//     When the user explicitly allows remote images, only http/https images are
+//     enabled; scripts, frames, forms, and connections remain blocked.
 //
 // The app-level CSP in tauri.conf.json is the outermost backstop.
 
